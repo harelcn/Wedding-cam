@@ -27,7 +27,13 @@ export default function FolderView() {
           setError('טעינת הגלריה נכשלה, נסה לרענן');
           return;
         }
-        if (data) setItems(data as MediaItem[]);
+        if (data) {
+          const fetched = data as MediaItem[];
+          setItems((prev) => {
+            const extra = prev.filter((item) => !fetched.some((f) => f.id === item.id));
+            return [...fetched, ...extra].sort((a, b) => (a.uploaded_at < b.uploaded_at ? 1 : -1));
+          });
+        }
       });
 
     const channel = supabase

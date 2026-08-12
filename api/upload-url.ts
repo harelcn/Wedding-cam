@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 
 const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
@@ -9,6 +10,17 @@ const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   'video/mp4': 'mp4',
   'video/quicktime': 'mov',
 };
+
+async function folderExists(folderId: string): Promise<boolean> {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY environment variables');
+  }
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const { data } = await supabase.from('folders').select('id').eq('id', folderId).maybeSingle();
+  return data !== null;
+}
 
 function getR2Client(): S3Client {
   const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY } = process.env;
@@ -36,6 +48,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!folderId || !contentType || !extension) {
     res.status(400).json({ error: 'folderId and a supported contentType are required' });
+    return;
+  }
+
+  if (!(await folderExists(folderId))) {
+    res.status(404).json({ error: 'Folder not found' });
     return;
   }
 

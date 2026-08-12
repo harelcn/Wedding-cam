@@ -13,6 +13,20 @@ vi.mock('@aws-sdk/client-s3', () => ({
   }),
 }));
 
+const maybeSingleMock = vi.fn();
+
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(() => ({
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: maybeSingleMock,
+        })),
+      })),
+    })),
+  })),
+}));
+
 import handler from '../../api/upload-url';
 
 function createMockRes() {
@@ -28,6 +42,9 @@ describe('POST /api/upload-url', () => {
     process.env.R2_ACCESS_KEY_ID = 'test-key';
     process.env.R2_SECRET_ACCESS_KEY = 'test-secret';
     process.env.R2_BUCKET_NAME = 'test-bucket';
+    process.env.VITE_SUPABASE_URL = 'https://test.supabase.co';
+    process.env.VITE_SUPABASE_ANON_KEY = 'test-anon-key';
+    maybeSingleMock.mockReset().mockResolvedValue({ data: { id: 'f1' } });
   });
 
   it('rejects non-POST methods', async () => {
@@ -56,6 +73,14 @@ describe('POST /api/upload-url', () => {
     const res = createMockRes();
     await handler(req, res);
     expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('rejects a folderId that does not exist', async () => {
+    maybeSingleMock.mockResolvedValue({ data: null });
+    const req: any = { method: 'POST', body: { folderId: 'does-not-exist', contentType: 'image/jpeg' } };
+    const res = createMockRes();
+    await handler(req, res);
+    expect(res.status).toHaveBeenCalledWith(404);
   });
 
   it('returns a signed upload URL and matching storage key for valid input', async () => {
