@@ -11,12 +11,16 @@ const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
 };
 
 function getR2Client(): S3Client {
+  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY } = process.env;
+  if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+    throw new Error('Missing R2_ACCOUNT_ID, R2_ACCESS_KEY_ID or R2_SECRET_ACCESS_KEY environment variables');
+  }
   return new S3Client({
     region: 'auto',
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      accessKeyId: R2_ACCESS_KEY_ID,
+      secretAccessKey: R2_SECRET_ACCESS_KEY,
     },
   });
 }
@@ -27,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { folderId, contentType } = req.body as { folderId?: string; contentType?: string };
+  const { folderId, contentType } = (req.body ?? {}) as { folderId?: string; contentType?: string };
   const extension = contentType ? EXTENSION_BY_CONTENT_TYPE[contentType] : undefined;
 
   if (!folderId || !contentType || !extension) {
@@ -45,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ContentType: contentType,
   });
 
-  const uploadUrl = await getSignedUrl(client, command, { expiresIn: 300 });
+  const uploadUrl = await getSignedUrl(client, command, { expiresIn: 900 });
 
   res.status(200).json({ uploadUrl, storageKey, mediaId });
 }

@@ -37,6 +37,13 @@ describe('POST /api/upload-url', () => {
     expect(res.status).toHaveBeenCalledWith(405);
   });
 
+  it('rejects a request with no body at all', async () => {
+    const req: any = { method: 'POST' };
+    const res = createMockRes();
+    await handler(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
   it('rejects a missing folderId', async () => {
     const req: any = { method: 'POST', body: { contentType: 'image/jpeg' } };
     const res = createMockRes();
