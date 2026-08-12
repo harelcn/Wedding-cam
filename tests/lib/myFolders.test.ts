@@ -27,4 +27,9 @@ describe('myFolders', () => {
     localStorage.setItem('wedding-cam-my-folders', '{not valid json');
     expect(getMyFolders()).toEqual([]);
   });
+
+  it('returns an empty array when stored JSON is valid but not an array', () => {
+    localStorage.setItem('wedding-cam-my-folders', '{}');
+    expect(getMyFolders()).toEqual([]);
+  });
 });

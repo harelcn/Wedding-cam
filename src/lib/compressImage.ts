@@ -13,6 +13,7 @@ export async function compressImage(file: File): Promise<Blob> {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
   ctx.drawImage(imageBitmap, 0, 0, width, height);
+  imageBitmap.close();
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(

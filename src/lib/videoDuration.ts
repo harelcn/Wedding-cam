@@ -8,7 +8,10 @@ export function getVideoDuration(file: Blob): Promise<number> {
       URL.revokeObjectURL(video.src);
       resolve(video.duration);
     };
-    video.onerror = () => reject(new Error('Could not read video metadata'));
+    video.onerror = () => {
+      URL.revokeObjectURL(video.src);
+      reject(new Error('Could not read video metadata'));
+    };
     video.src = URL.createObjectURL(file);
   });
 }

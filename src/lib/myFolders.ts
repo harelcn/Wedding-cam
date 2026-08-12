@@ -11,7 +11,8 @@ export function getMyFolders(): MyFolderEntry[] {
   const raw = localStorage.getItem(MY_FOLDERS_KEY);
   if (!raw) return [];
   try {
-    return JSON.parse(raw) as MyFolderEntry[];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as MyFolderEntry[]) : [];
   } catch {
     return [];
   }
