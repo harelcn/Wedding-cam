@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { compressImage } from '../lib/compressImage';
+import { MAX_VIDEO_DURATION_SECONDS } from '../lib/videoDuration';
 
 interface CameraCaptureProps {
   onPhoto: (blob: Blob) => void;
   onVideo: (blob: Blob) => void;
 }
 
-const MAX_VIDEO_DURATION_MS = 60_000;
+const MAX_VIDEO_DURATION_MS = MAX_VIDEO_DURATION_SECONDS * 1000;
 
 function pickSupportedVideoMimeType(): string {
   const candidates = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'];

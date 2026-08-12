@@ -22,7 +22,11 @@ export default function FolderView() {
       .select('*')
       .eq('folder_id', folderId)
       .order('uploaded_at', { ascending: false })
-      .then(({ data }) => {
+      .then(({ data, error: fetchError }) => {
+        if (fetchError) {
+          setError('טעינת הגלריה נכשלה, נסה לרענן');
+          return;
+        }
         if (data) setItems(data as MediaItem[]);
       });
 
@@ -32,7 +36,8 @@ export default function FolderView() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'media', filter: `folder_id=eq.${folderId}` },
         (payload) => {
-          setItems((prev) => [payload.new as MediaItem, ...prev]);
+          const newItem = payload.new as MediaItem;
+          setItems((prev) => (prev.some((item) => item.id === newItem.id) ? prev : [newItem, ...prev]));
         }
       )
       .subscribe();
@@ -46,46 +51,54 @@ export default function FolderView() {
     if (!folderId) return;
     setError(null);
 
-    if (mediaType === 'video') {
-      const duration = await getVideoDuration(blob);
-      if (duration > MAX_VIDEO_DURATION_SECONDS) {
-        setError('סרטונים מוגבלים ל-60 שניות');
+    try {
+      if (mediaType === 'video') {
+        const duration = await getVideoDuration(blob);
+        if (duration > MAX_VIDEO_DURATION_SECONDS) {
+          setError('סרטונים מוגבלים ל-60 שניות');
+          return;
+        }
+      }
+
+      const contentType = blob.type || (mediaType === 'image' ? 'image/jpeg' : 'video/webm');
+
+      const response = await fetch('/api/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId, contentType }),
+      });
+
+      if (!response.ok) {
+        setError('ההעלאה נכשלה, נסה שוב');
         return;
       }
+
+      const { uploadUrl, storageKey } = await response.json();
+
+      const putResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: blob,
+      });
+      if (!putResponse.ok) {
+        setError('ההעלאה נכשלה, נסה שוב');
+        return;
+      }
+
+      const { error: insertError } = await supabase.from('media').insert({
+        folder_id: folderId,
+        storage_key: storageKey,
+        type: mediaType,
+        uploader_device_id: getDeviceId(),
+        file_size_bytes: blob.size,
+      });
+
+      if (insertError) {
+        setError('ההעלאה נכשלה, נסה שוב');
+      }
+    } catch {
+      setError('ההעלאה נכשלה, בדוק את החיבור לאינטרנט ונסה שוב');
     }
-
-    const contentType = blob.type || (mediaType === 'image' ? 'image/jpeg' : 'video/webm');
-
-    const response = await fetch('/api/upload-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folderId, contentType }),
-    });
-
-    if (!response.ok) {
-      setError('ההעלאה נכשלה, נסה שוב');
-      return;
-    }
-
-    const { uploadUrl, storageKey } = await response.json();
-
-    const putResponse = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': contentType },
-      body: blob,
-    });
-    if (!putResponse.ok) {
-      setError('ההעלאה נכשלה, נסה שוב');
-      return;
-    }
-
-    await supabase.from('media').insert({
-      folder_id: folderId,
-      storage_key: storageKey,
-      type: mediaType,
-      uploader_device_id: getDeviceId(),
-      file_size_bytes: blob.size,
-    });
   }
 
   async function handleFileSelected(event: React.ChangeEvent<HTMLInputElement>) {
@@ -94,8 +107,12 @@ export default function FolderView() {
     if (!file) return;
 
     if (file.type.startsWith('image/')) {
-      const compressed = await compressImage(file);
-      await uploadBlob(compressed, 'image');
+      try {
+        const compressed = await compressImage(file);
+        await uploadBlob(compressed, 'image');
+      } catch {
+        setError('לא ניתן היה לעבד את התמונה, נסה קובץ אחר');
+      }
     } else if (file.type.startsWith('video/')) {
       await uploadBlob(file, 'video');
     }

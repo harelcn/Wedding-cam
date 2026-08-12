@@ -11,10 +11,12 @@ export default function CreateFolder() {
   const [folderId, setFolderId] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
+    if (isSubmitting) return;
     setError(null);
 
     const trimmedName = name.trim();
@@ -23,6 +25,7 @@ export default function CreateFolder() {
       return;
     }
 
+    setIsSubmitting(true);
     const deviceId = getDeviceId();
     const { data, error: insertError } = await supabase
       .from('folders')
@@ -32,6 +35,7 @@ export default function CreateFolder() {
 
     if (insertError || !data) {
       setError('יצירת התיקייה נכשלה, נסה שוב');
+      setIsSubmitting(false);
       return;
     }
 
@@ -44,6 +48,7 @@ export default function CreateFolder() {
 
     setFolderId(data.id);
     setQrDataUrl(await generateQrDataUrl(buildJoinUrl(data.id)));
+    setIsSubmitting(false);
   }
 
   async function handleShare() {
@@ -52,13 +57,17 @@ export default function CreateFolder() {
     const blob = await response.blob();
     const file = new File([blob], 'qr-code.png', { type: 'image/png' });
 
-    if (navigator.share && navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: name });
-    } else {
-      const link = document.createElement('a');
-      link.href = qrDataUrl;
-      link.download = 'qr-code.png';
-      link.click();
+    try {
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: name });
+      } else {
+        const link = document.createElement('a');
+        link.href = qrDataUrl;
+        link.download = 'qr-code.png';
+        link.click();
+      }
+    } catch {
+      // User cancelled the native share sheet — not an error worth surfacing
     }
   }
 
@@ -78,7 +87,7 @@ export default function CreateFolder() {
       <h1>צור תיקייה</h1>
       <form onSubmit={handleCreate}>
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="שם התיקייה" />
-        <button type="submit">צור</button>
+        <button type="submit" disabled={isSubmitting}>צור</button>
       </form>
       {error && <p role="alert">{error}</p>}
     </main>
