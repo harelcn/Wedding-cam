@@ -5,6 +5,7 @@ import ScanFolder from './pages/ScanFolder';
 import JoinFolder from './pages/JoinFolder';
 import MyFolders from './pages/MyFolders';
 import FolderView from './pages/FolderView';
+import NotFound from './pages/NotFound';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
       <Route path="/join/:folderId" element={<JoinFolder />} />
       <Route path="/my-folders" element={<MyFolders />} />
       <Route path="/folder/:folderId" element={<FolderView />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

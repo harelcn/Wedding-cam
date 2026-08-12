@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { getDeviceId } from '../lib/deviceId';
 import { compressImage } from '../lib/compressImage';
@@ -120,6 +120,7 @@ export default function FolderView() {
 
   return (
     <main className="folder-view">
+      <Link to="/my-folders" className="back-link">← התיקיות שלי</Link>
       {error && <p role="alert">{error}</p>}
       <div className="folder-actions">
         <button type="button" onClick={() => setShowCamera((prev) => !prev)}>
