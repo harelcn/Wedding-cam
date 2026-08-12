@@ -1,5 +1,6 @@
 import type { MediaItem } from '../types';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
+import { CheckIcon, VideoIcon } from './icons';
 
 interface MediaGridItemProps {
   item: MediaItem;
@@ -23,9 +24,12 @@ export default function MediaGridItem({ item, selected, onToggle }: MediaGridIte
       {item.type === 'image' ? (
         <img src={url} alt="" loading="lazy" />
       ) : (
-        <video src={url} muted />
+        <>
+          <video src={url} muted />
+          <span className="type-badge" aria-hidden="true"><VideoIcon /></span>
+        </>
       )}
-      <span className="checkbox" aria-hidden="true">{selected ? '✓' : ''}</span>
+      <span className="checkbox" aria-hidden="true">{selected ? <CheckIcon /> : null}</span>
     </button>
   );
 }

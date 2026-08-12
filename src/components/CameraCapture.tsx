@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { compressImage } from '../lib/compressImage';
 import { MAX_VIDEO_DURATION_SECONDS } from '../lib/videoDuration';
+import { CloseIcon } from './icons';
 
 interface CameraCaptureProps {
   onPhoto: (blob: Blob) => void;
   onVideo: (blob: Blob) => void;
+  onClose: () => void;
 }
+
+type CaptureMode = 'photo' | 'video';
 
 const MAX_VIDEO_DURATION_MS = MAX_VIDEO_DURATION_SECONDS * 1000;
 
@@ -15,14 +19,23 @@ function pickSupportedVideoMimeType(): string {
   return supported ?? 'video/webm';
 }
 
-export default function CameraCapture({ onPhoto, onVideo }: CameraCaptureProps) {
+function formatTimer(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const stopTimerRef = useRef<number | null>(null);
+  const timerIntervalRef = useRef<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [useFallback, setUseFallback] = useState(false);
+  const [mode, setMode] = useState<CaptureMode>('photo');
+  const [recordedSeconds, setRecordedSeconds] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +65,7 @@ export default function CameraCapture({ onPhoto, onVideo }: CameraCaptureProps) 
     return () => {
       cancelled = true;
       if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
+      if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
@@ -87,6 +101,10 @@ export default function CameraCapture({ onPhoto, onVideo }: CameraCaptureProps) 
     recorder.start();
     mediaRecorderRef.current = recorder;
     setIsRecording(true);
+    setRecordedSeconds(0);
+    timerIntervalRef.current = window.setInterval(() => {
+      setRecordedSeconds((prev) => prev + 1);
+    }, 1000);
     stopTimerRef.current = window.setTimeout(() => stopRecording(), MAX_VIDEO_DURATION_MS);
   }
 
@@ -95,8 +113,24 @@ export default function CameraCapture({ onPhoto, onVideo }: CameraCaptureProps) 
       window.clearTimeout(stopTimerRef.current);
       stopTimerRef.current = null;
     }
+    if (timerIntervalRef.current) {
+      window.clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
+  }
+
+  function handleShutterClick() {
+    if (mode === 'photo') {
+      takePhoto();
+      return;
+    }
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
   }
 
   async function handleFallbackFile(event: React.ChangeEvent<HTMLInputElement>) {
@@ -115,6 +149,9 @@ export default function CameraCapture({ onPhoto, onVideo }: CameraCaptureProps) 
   if (useFallback) {
     return (
       <div className="camera-capture camera-capture-fallback">
+        <button type="button" className="icon-button camera-close-button fallback-close" onClick={onClose} aria-label="סגור">
+          <CloseIcon />
+        </button>
         <label className="upload-button">
           פתח מצלמה
           <input
@@ -132,15 +169,54 @@ export default function CameraCapture({ onPhoto, onVideo }: CameraCaptureProps) 
   return (
     <div className="camera-capture">
       <video ref={videoRef} muted playsInline />
-      <div className="camera-controls">
-        <button type="button" onClick={takePhoto} disabled={isRecording}>
-          צלם תמונה
+
+      <div className="camera-top-bar">
+        <button
+          type="button"
+          className="icon-button camera-close-button"
+          onClick={isRecording ? undefined : onClose}
+          disabled={isRecording}
+          aria-label="סגור"
+        >
+          <CloseIcon />
         </button>
-        {isRecording ? (
-          <button type="button" onClick={stopRecording}>עצור הקלטה</button>
-        ) : (
-          <button type="button" onClick={startRecording}>הקלט וידאו</button>
-        )}
+      </div>
+
+      {isRecording && (
+        <div className="camera-recording-indicator">
+          <span className="camera-recording-dot" />
+          {formatTimer(recordedSeconds)}
+        </div>
+      )}
+
+      <div className="camera-bottom-bar">
+        <div className="camera-mode-toggle">
+          <button
+            type="button"
+            className={mode === 'photo' ? 'active' : ''}
+            onClick={() => setMode('photo')}
+            disabled={isRecording}
+          >
+            תמונה
+          </button>
+          <button
+            type="button"
+            className={mode === 'video' ? 'active' : ''}
+            onClick={() => setMode('video')}
+            disabled={isRecording}
+          >
+            וידאו
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className={`camera-shutter${isRecording ? ' recording' : ''}`}
+          onClick={handleShutterClick}
+          aria-label={mode === 'photo' ? 'צלם תמונה' : isRecording ? 'עצור הקלטה' : 'התחל הקלטה'}
+        >
+          <span className="camera-shutter-inner" />
+        </button>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { getDeviceId } from '../lib/deviceId';
 import { addMyFolder } from '../lib/myFolders';
 import { generateQrDataUrl } from '../lib/qrCode';
 import { buildJoinUrl } from '../lib/joinUrl';
+import { ShareIcon, AlertIcon } from '../components/icons';
 
 export default function CreateFolder() {
   const [name, setName] = useState('');
@@ -74,22 +75,40 @@ export default function CreateFolder() {
   if (folderId && qrDataUrl) {
     return (
       <main className="create-folder">
-        <h1>{name}</h1>
-        <img src={qrDataUrl} alt="קוד QR להצטרפות לתיקייה" />
-        <button type="button" onClick={handleShare}>שתף</button>
-        <button type="button" onClick={() => navigate(`/folder/${folderId}`)}>כניסה לתיקייה</button>
+        <div className="home-header">
+          <h1>{name}</h1>
+          <p className="subtitle">סרקו את הקוד כדי להצטרף לתיקייה</p>
+        </div>
+        <div className="qr-card">
+          <img src={qrDataUrl} alt="קוד QR להצטרפות לתיקייה" />
+        </div>
+        <button type="button" onClick={handleShare}>
+          <ShareIcon size={18} />
+          שתף
+        </button>
+        <button type="button" className="secondary" onClick={() => navigate(`/folder/${folderId}`)}>
+          כניסה לתיקייה
+        </button>
       </main>
     );
   }
 
   return (
     <main className="create-folder">
-      <h1>צור תיקייה</h1>
-      <form onSubmit={handleCreate}>
+      <div className="home-header">
+        <h1>צור תיקייה</h1>
+        <p className="subtitle">תנו שם לאירוע כדי להתחיל</p>
+      </div>
+      <form className="card" onSubmit={handleCreate}>
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="שם התיקייה" />
         <button type="submit" disabled={isSubmitting}>צור</button>
       </form>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <div className="error-banner">
+          <AlertIcon />
+          {error}
+        </div>
+      )}
     </main>
   );
 }

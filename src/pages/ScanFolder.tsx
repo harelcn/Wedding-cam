@@ -16,10 +16,5 @@ export default function ScanFolder() {
     }
   }
 
-  return (
-    <main className="scan-folder">
-      <h1>סרוק קוד</h1>
-      <QrScanner onDecode={handleDecode} />
-    </main>
-  );
+  return <QrScanner onDecode={handleDecode} onClose={() => navigate('/')} />;
 }

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { addMyFolder } from '../lib/myFolders';
 import type { Folder } from '../types';
+import { AlertIcon, FolderIcon } from '../components/icons';
 
 export default function JoinFolder() {
   const { folderId } = useParams<{ folderId: string }>();
@@ -40,19 +41,30 @@ export default function JoinFolder() {
   if (error) {
     return (
       <main className="join-folder">
-        <p>{error}</p>
+        <div className="empty-state">
+          <AlertIcon size={32} />
+          <p>{error}</p>
+        </div>
         <button type="button" onClick={() => navigate('/')}>חזרה לדף הבית</button>
       </main>
     );
   }
 
   if (!folder) {
-    return <main className="join-folder">טוען...</main>;
+    return (
+      <main className="join-folder">
+        <div className="spinner" />
+      </main>
+    );
   }
 
   return (
     <main className="join-folder">
-      <h1>{folder.name}</h1>
+      <div className="card card-center">
+        <FolderIcon size={36} />
+        <h1>{folder.name}</h1>
+        <p className="subtitle">הצטרף כדי לצלם ולראות את כל התמונות של האירוע</p>
+      </div>
       <button type="button" onClick={handleJoin}>הצטרף</button>
     </main>
   );

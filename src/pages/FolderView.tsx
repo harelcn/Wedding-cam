@@ -7,6 +7,7 @@ import { getVideoDuration, MAX_VIDEO_DURATION_SECONDS } from '../lib/videoDurati
 import CameraCapture from '../components/CameraCapture';
 import MediaGrid from '../components/MediaGrid';
 import type { MediaItem } from '../types';
+import { AlertIcon, ArrowStartIcon, CameraIcon, UploadIcon } from '../components/icons';
 
 export default function FolderView() {
   const { folderId } = useParams<{ folderId: string }>();
@@ -126,13 +127,23 @@ export default function FolderView() {
 
   return (
     <main className="folder-view">
-      <Link to="/my-folders" className="back-link">← התיקיות שלי</Link>
-      {error && <p role="alert">{error}</p>}
+      <Link to="/my-folders" className="back-link">
+        <ArrowStartIcon size={16} />
+        התיקיות שלי
+      </Link>
+      {error && (
+        <div className="error-banner">
+          <AlertIcon />
+          {error}
+        </div>
+      )}
       <div className="folder-actions">
-        <button type="button" onClick={() => setShowCamera((prev) => !prev)}>
-          {showCamera ? 'סגור מצלמה' : 'פתח מצלמה'}
+        <button type="button" onClick={() => setShowCamera(true)}>
+          <CameraIcon size={18} />
+          פתח מצלמה
         </button>
         <label className="upload-button">
+          <UploadIcon size={18} />
           העלה מהגלריה
           <input type="file" accept="image/*,video/*" onChange={handleFileSelected} hidden />
         </label>
@@ -141,6 +152,7 @@ export default function FolderView() {
         <CameraCapture
           onPhoto={(blob) => uploadBlob(blob, 'image')}
           onVideo={(blob) => uploadBlob(blob, 'video')}
+          onClose={() => setShowCamera(false)}
         />
       )}
       <MediaGrid items={items} />

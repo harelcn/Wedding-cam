@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
+import { AlertIcon, CloseIcon } from './icons';
 
 interface QrScannerProps {
   onDecode: (text: string) => void;
+  onClose: () => void;
 }
 
-export default function QrScanner({ onDecode }: QrScannerProps) {
+export default function QrScanner({ onDecode, onClose }: QrScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onDecodeRef = useRef(onDecode);
@@ -68,9 +70,23 @@ export default function QrScanner({ onDecode }: QrScannerProps) {
 
   return (
     <div className="qr-scanner">
-      {error ? <p role="alert">{error}</p> : null}
       <video ref={videoRef} muted playsInline />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
+      <div className="qr-scanner-frame" aria-hidden="true">
+        <span className="corner tl" />
+        <span className="corner tr" />
+        <span className="corner bl" />
+        <span className="corner br" />
+      </div>
+      <button type="button" className="icon-button qr-scanner-close" onClick={onClose} aria-label="סגור">
+        <CloseIcon />
+      </button>
+      {error ? (
+        <div className="error-banner qr-scanner-error" role="alert">
+          <AlertIcon />
+          {error}
+        </div>
+      ) : null}
     </div>
   );
 }

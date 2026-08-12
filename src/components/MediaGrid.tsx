@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { MediaItem } from '../types';
 import MediaGridItem from './MediaGridItem';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
+import { DownloadIcon, CameraIcon } from './icons';
 
 interface MediaGridProps {
   items: MediaItem[];
@@ -53,13 +54,23 @@ export default function MediaGrid({ items }: MediaGridProps) {
     setIsDownloading(false);
   }
 
+  if (items.length === 0) {
+    return (
+      <div className="empty-grid">
+        <CameraIcon size={32} />
+        <p>עדיין אין כאן תמונות - תהיו הראשונים לצלם</p>
+      </div>
+    );
+  }
+
   return (
     <div className="media-grid-wrapper">
       <div className="media-grid-toolbar">
-        <button type="button" onClick={selectAll}>בחר הכל</button>
-        <button type="button" onClick={clearSelection}>נקה בחירה</button>
+        <button type="button" className="secondary" onClick={selectAll}>בחר הכל</button>
+        <button type="button" className="secondary" onClick={clearSelection}>נקה בחירה</button>
         <button type="button" onClick={downloadSelected} disabled={selectedIds.size === 0 || isDownloading}>
-          הורד ({selectedIds.size})
+          <DownloadIcon size={16} />
+          {selectedIds.size > 0 ? `הורד (${selectedIds.size})` : 'הורד'}
         </button>
       </div>
       <div className="media-grid">
