@@ -26,6 +26,11 @@ export default function CameraCapture({ onPhoto, onVideo }: CameraCaptureProps) 
   useEffect(() => {
     let cancelled = false;
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setUseFallback(true);
+      return;
+    }
+
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: 'environment' }, audio: true })
       .then((stream) => {
@@ -85,6 +90,10 @@ export default function CameraCapture({ onPhoto, onVideo }: CameraCaptureProps) 
   }
 
   function stopRecording() {
+    if (stopTimerRef.current) {
+      window.clearTimeout(stopTimerRef.current);
+      stopTimerRef.current = null;
+    }
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
   }

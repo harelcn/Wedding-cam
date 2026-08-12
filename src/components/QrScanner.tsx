@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
 
 interface QrScannerProps {
@@ -8,6 +8,9 @@ interface QrScannerProps {
 export default function QrScanner({ onDecode }: QrScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const onDecodeRef = useRef(onDecode);
+  onDecodeRef.current = onDecode;
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -15,7 +18,18 @@ export default function QrScanner({ onDecode }: QrScannerProps) {
     let stopped = false;
 
     async function start() {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      let mediaStream: MediaStream;
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      } catch {
+        if (!stopped) setError('לא ניתן לגשת למצלמה');
+        return;
+      }
+      if (stopped) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      stream = mediaStream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
@@ -36,7 +50,7 @@ export default function QrScanner({ onDecode }: QrScannerProps) {
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const result = jsQR(imageData.data, imageData.width, imageData.height);
           if (result) {
-            onDecode(result.data);
+            onDecodeRef.current(result.data);
           }
         }
       }
@@ -50,10 +64,11 @@ export default function QrScanner({ onDecode }: QrScannerProps) {
       cancelAnimationFrame(animationFrameId);
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [onDecode]);
+  }, []);
 
   return (
     <div className="qr-scanner">
+      {error ? <p role="alert">{error}</p> : null}
       <video ref={videoRef} muted playsInline />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
     </div>

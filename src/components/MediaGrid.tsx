@@ -9,6 +9,7 @@ interface MediaGridProps {
 
 export default function MediaGrid({ items }: MediaGridProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDownloading, setIsDownloading] = useState(false);
 
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
@@ -31,18 +32,25 @@ export default function MediaGrid({ items }: MediaGridProps) {
   }
 
   async function downloadSelected() {
+    if (isDownloading) return;
+    setIsDownloading(true);
     const selectedItems = items.filter((item) => selectedIds.has(item.id));
     for (const item of selectedItems) {
-      const url = publicMediaUrl(item.storage_key);
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = item.storage_key.split('/').pop() ?? 'media';
-      link.click();
-      URL.revokeObjectURL(objectUrl);
+      try {
+        const url = publicMediaUrl(item.storage_key);
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = item.storage_key.split('/').pop() ?? 'media';
+        link.click();
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        // Skip this item and keep downloading the rest of the selection
+      }
     }
+    setIsDownloading(false);
   }
 
   return (
@@ -50,7 +58,7 @@ export default function MediaGrid({ items }: MediaGridProps) {
       <div className="media-grid-toolbar">
         <button type="button" onClick={selectAll}>בחר הכל</button>
         <button type="button" onClick={clearSelection}>נקה בחירה</button>
-        <button type="button" onClick={downloadSelected} disabled={selectedIds.size === 0}>
+        <button type="button" onClick={downloadSelected} disabled={selectedIds.size === 0 || isDownloading}>
           הורד ({selectedIds.size})
         </button>
       </div>
