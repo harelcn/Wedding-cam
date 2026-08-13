@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
 import { CameraIcon, QrCodeIcon, FolderIcon } from '../components/icons';
+import logo from '../assets/logo.png';
 
 export default function Home() {
   return (
     <main className="home">
       <div className="home-header">
-        <h1>Wedding Cam</h1>
+        <img src={logo} alt="POV" className="home-logo" />
         <p className="subtitle">אלבום משותף לכל האירוע - צלמו, שתפו, תיהנו</p>
       </div>
       <div className="home-actions">

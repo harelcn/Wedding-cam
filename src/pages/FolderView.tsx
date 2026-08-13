@@ -7,7 +7,7 @@ import { getVideoDuration, MAX_VIDEO_DURATION_SECONDS } from '../lib/videoDurati
 import CameraCapture from '../components/CameraCapture';
 import MediaGrid from '../components/MediaGrid';
 import type { MediaItem } from '../types';
-import { AlertIcon, CameraIcon, CloseIcon, FolderIcon, QrCodeIcon, UploadIcon } from '../components/icons';
+import { AlertIcon, ArrowStartIcon, CameraIcon, CloseIcon, UploadIcon } from '../components/icons';
 
 export default function FolderView() {
   const { folderId } = useParams<{ folderId: string }>();
@@ -127,20 +127,10 @@ export default function FolderView() {
 
   return (
     <main className="folder-view">
-      <nav className="quick-nav">
-        <Link className="quick-nav-link" to="/create">
-          <CameraIcon size={18} />
-          צור תיקייה
-        </Link>
-        <Link className="quick-nav-link" to="/scan">
-          <QrCodeIcon size={18} />
-          סרוק קוד
-        </Link>
-        <Link className="quick-nav-link active" to="/my-folders">
-          <FolderIcon size={18} />
-          התיקיות שלי
-        </Link>
-      </nav>
+      <Link to="/my-folders" className="back-link">
+        <ArrowStartIcon size={16} />
+        חזרה לתיקיות שלי
+      </Link>
       {error && (
         <div className="error-banner error-toast">
           <span className="error-toast-message">
