@@ -18,7 +18,12 @@ function loadImageElement(url: string): Promise<HTMLImageElement> {
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error('image element failed to load'));
-    img.src = url;
+    // The plain grid thumbnail for this same URL was already loaded without
+    // crossOrigin. Requesting the identical URL again with crossOrigin set
+    // can hit the browser's cache from that earlier non-CORS load and fail
+    // the CORS check — a distinct query string forces a fresh, properly
+    // CORS-negotiated request (R2 ignores query strings for object lookup).
+    img.src = `${url}${url.includes('?') ? '&' : '?'}cors=1`;
   });
 }
 
