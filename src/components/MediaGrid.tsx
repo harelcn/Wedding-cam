@@ -100,13 +100,13 @@ export default function MediaGrid({ items }: MediaGridProps) {
           <button type="button" className="secondary" onClick={clearSelection}>נקה בחירה</button>
           {isShareSupported() && (
             <button type="button" onClick={shareSelected} disabled={selectedIds.size === 0 || isSharing}>
-              <ShareIcon size={16} />
-              שתף
+              {isSharing ? <span className="spinner spinner-sm" /> : <ShareIcon size={16} />}
+              {isSharing ? 'משתף...' : 'שתף'}
             </button>
           )}
           <button type="button" onClick={downloadSelected} disabled={selectedIds.size === 0 || isDownloading}>
-            <DownloadIcon size={16} />
-            {selectedIds.size > 0 ? `הורד (${selectedIds.size})` : 'הורד'}
+            {isDownloading ? <span className="spinner spinner-sm" /> : <DownloadIcon size={16} />}
+            {isDownloading ? 'מוריד...' : selectedIds.size > 0 ? `הורד (${selectedIds.size})` : 'הורד'}
           </button>
         </div>
       )}

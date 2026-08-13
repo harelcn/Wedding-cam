@@ -3,38 +3,34 @@ interface DownloadEntry {
   filename: string;
 }
 
-async function fetchAsFile({ url, filename }: DownloadEntry): Promise<File> {
-  const response = await fetch(url);
-  const blob = await response.blob();
-  return new File([blob], filename, { type: blob.type || undefined });
+const FETCH_TIMEOUT_MS = 15_000;
+
+async function fetchAsFile({ url, filename }: DownloadEntry): Promise<File | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const response = await fetch(url, { signal: controller.signal });
+    window.clearTimeout(timeoutId);
+    const blob = await response.blob();
+    return new File([blob], filename, { type: blob.type || undefined });
+  } catch {
+    return null;
+  }
 }
 
-async function fetchAsFiles(entries: DownloadEntry[]): Promise<File[]> {
-  const results = await Promise.allSettled(entries.map(fetchAsFile));
-  return results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+async function fetchAsFiles(entries: DownloadEntry[]): Promise<{ entry: DownloadEntry; file: File | null }[]> {
+  const files = await Promise.all(entries.map(fetchAsFile));
+  return entries.map((entry, i) => ({ entry, file: files[i] }));
 }
 
-async function shareOrDownloadFiles(files: File[]): Promise<void> {
-  if (files.length === 0) return;
-
-  if (navigator.share && navigator.canShare?.({ files })) {
-    try {
-      await navigator.share({ files });
-      return;
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      // Sharing failed for a reason other than a deliberate user cancel — fall through to a direct download
-    }
-  }
-
-  for (const file of files) {
-    const objectUrl = URL.createObjectURL(file);
-    const link = document.createElement('a');
-    link.href = objectUrl;
-    link.download = file.name;
-    link.click();
-    URL.revokeObjectURL(objectUrl);
-  }
+/**
+ * Opens the real file URL directly instead of relying on the `download`
+ * attribute — Safari does not reliably honor `download` for blob/data URLs,
+ * but it does let the user save from the native viewer (share icon or
+ * long-press) once the file is actually open.
+ */
+function openDirectly(url: string): void {
+  window.open(url, '_blank', 'noopener');
 }
 
 export function isShareSupported(): boolean {
@@ -43,16 +39,40 @@ export function isShareSupported(): boolean {
 
 export async function saveMediaFile(url: string, filename: string): Promise<void> {
   const file = await fetchAsFile({ url, filename });
-  await shareOrDownloadFiles([file]);
+
+  if (file && navigator.share && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+    }
+  }
+
+  openDirectly(url);
 }
 
 export async function saveMediaFiles(entries: DownloadEntry[]): Promise<void> {
-  const files = await fetchAsFiles(entries);
-  await shareOrDownloadFiles(files);
+  const fetched = await fetchAsFiles(entries);
+  const files = fetched.flatMap(({ file }) => (file ? [file] : []));
+
+  if (files.length > 0 && navigator.share && navigator.canShare?.({ files })) {
+    try {
+      await navigator.share({ files });
+      return;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+    }
+  }
+
+  for (const { entry } of fetched) {
+    openDirectly(entry.url);
+  }
 }
 
 export async function shareMediaFiles(entries: DownloadEntry[]): Promise<void> {
-  const files = await fetchAsFiles(entries);
+  const fetched = await fetchAsFiles(entries);
+  const files = fetched.flatMap(({ file }) => (file ? [file] : []));
   if (files.length === 0 || !navigator.share || !navigator.canShare?.({ files })) return;
   try {
     await navigator.share({ files });
@@ -62,21 +82,22 @@ export async function shareMediaFiles(entries: DownloadEntry[]): Promise<void> {
 }
 
 export async function shareDataUrlImage(dataUrl: string, filename: string, title?: string): Promise<void> {
-  const response = await fetch(dataUrl);
-  const blob = await response.blob();
-  const file = new File([blob], filename, { type: blob.type || 'image/png' });
+  try {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    const file = new File([blob], filename, { type: blob.type || 'image/png' });
 
-  if (navigator.share && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title });
-      return;
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title });
+        return;
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+      }
     }
+  } catch {
+    // Fetching/wrapping the data URL failed — still fall through to opening it directly
   }
 
-  const link = document.createElement('a');
-  link.href = dataUrl;
-  link.download = filename;
-  link.click();
+  openDirectly(dataUrl);
 }

@@ -223,6 +223,12 @@ main.join-folder {
   align-self: center;
 }
 
+.spinner-sm {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

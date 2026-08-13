@@ -90,7 +90,7 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
           disabled={isSaving}
           aria-label="שמור לגלריה"
         >
-          <DownloadIcon />
+          {isSaving ? <span className="spinner spinner-sm" /> : <DownloadIcon />}
         </button>
       </div>
 
