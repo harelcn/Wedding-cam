@@ -1,11 +1,11 @@
-interface DownloadEntry {
+export interface MediaDownloadEntry {
   url: string;
   filename: string;
 }
 
 const FETCH_TIMEOUT_MS = 15_000;
 
-async function fetchAsFile({ url, filename }: DownloadEntry): Promise<File | null> {
+export async function fetchFile({ url, filename }: MediaDownloadEntry): Promise<File | null> {
   try {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -18,67 +18,40 @@ async function fetchAsFile({ url, filename }: DownloadEntry): Promise<File | nul
   }
 }
 
-async function fetchAsFiles(entries: DownloadEntry[]): Promise<{ entry: DownloadEntry; file: File | null }[]> {
-  const files = await Promise.all(entries.map(fetchAsFile));
-  return entries.map((entry, i) => ({ entry, file: files[i] }));
-}
-
-/**
- * Opens the real file URL directly instead of relying on the `download`
- * attribute — Safari does not reliably honor `download` for blob/data URLs,
- * but it does let the user save from the native viewer (share icon or
- * long-press) once the file is actually open.
- */
-function openDirectly(url: string): void {
-  window.open(url, '_blank', 'noopener');
-}
-
 export function isShareSupported(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 }
 
-export async function saveMediaFile(url: string, filename: string): Promise<void> {
-  const file = await fetchAsFile({ url, filename });
-
-  if (file && navigator.share && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file] });
-      return;
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-    }
-  }
-
-  openDirectly(url);
+export function canShareFiles(files: File[]): boolean {
+  return files.length > 0 && isShareSupported() && !!navigator.canShare?.({ files });
 }
 
-export async function saveMediaFiles(entries: DownloadEntry[]): Promise<void> {
-  const fetched = await fetchAsFiles(entries);
-  const files = fetched.flatMap(({ file }) => (file ? [file] : []));
-
-  if (files.length > 0 && navigator.share && navigator.canShare?.({ files })) {
-    try {
-      await navigator.share({ files });
-      return;
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-    }
-  }
-
-  for (const { entry } of fetched) {
-    openDirectly(entry.url);
-  }
+/**
+ * Call this synchronously inside a click handler, with files that were
+ * already fetched ahead of time (no `await` before this call). Safari
+ * silently ignores navigator.share() once it's no longer within the
+ * user's original tap — even a single prior network fetch is enough to
+ * lose that window, which is why every file here must be pre-fetched.
+ */
+export function shareFilesSync(files: File[]): Promise<boolean> {
+  if (!canShareFiles(files)) return Promise.resolve(false);
+  return navigator
+    .share({ files })
+    .then(() => true)
+    .catch((err) => {
+      // A deliberate user cancel still counts as "handled"
+      return err instanceof Error && err.name === 'AbortError';
+    });
 }
 
-export async function shareMediaFiles(entries: DownloadEntry[]): Promise<void> {
-  const fetched = await fetchAsFiles(entries);
-  const files = fetched.flatMap(({ file }) => (file ? [file] : []));
-  if (files.length === 0 || !navigator.share || !navigator.canShare?.({ files })) return;
-  try {
-    await navigator.share({ files });
-  } catch {
-    // Cancelled or failed — nothing more useful to do here
-  }
+/**
+ * Opens the real file URL directly instead of relying on the `download`
+ * attribute — Safari does not reliably honor `download` for blob/data URLs.
+ * Must also be called synchronously within the click handler for the same
+ * reason as shareFilesSync.
+ */
+export function openDirectly(url: string): void {
+  window.open(url, '_blank', 'noopener');
 }
 
 export async function shareDataUrlImage(dataUrl: string, filename: string, title?: string): Promise<void> {

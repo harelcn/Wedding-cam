@@ -1,13 +1,20 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { MediaItem } from '../types';
 import MediaGridItem from './MediaGridItem';
 import MediaViewer from './MediaViewer';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
-import { isShareSupported, saveMediaFiles, shareMediaFiles } from '../lib/saveMedia';
+import { fetchFile, isShareSupported, openDirectly, shareFilesSync, type MediaDownloadEntry } from '../lib/saveMedia';
 import { DownloadIcon, CameraIcon, CloseIcon, ShareIcon } from './icons';
 
 interface MediaGridProps {
   items: MediaItem[];
+}
+
+function entryFor(item: MediaItem): MediaDownloadEntry {
+  return {
+    url: publicMediaUrl(item.storage_key),
+    filename: item.storage_key.split('/').pop() ?? 'media',
+  };
 }
 
 export default function MediaGrid({ items }: MediaGridProps) {
@@ -16,6 +23,17 @@ export default function MediaGrid({ items }: MediaGridProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const fileCacheRef = useRef<Map<string, File | null>>(new Map());
+
+  function prefetch(id: string) {
+    if (fileCacheRef.current.has(id)) return;
+    const item = items.find((candidate) => candidate.id === id);
+    if (!item) return;
+    fileCacheRef.current.set(id, null);
+    fetchFile(entryFor(item)).then((file) => {
+      fileCacheRef.current.set(id, file);
+    });
+  }
 
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
@@ -24,6 +42,7 @@ export default function MediaGrid({ items }: MediaGridProps) {
         next.delete(id);
       } else {
         next.add(id);
+        prefetch(id);
       }
       return next;
     });
@@ -41,6 +60,7 @@ export default function MediaGrid({ items }: MediaGridProps) {
     if (!selectMode) {
       setSelectMode(true);
       setSelectedIds(new Set([item.id]));
+      prefetch(item.id);
     }
   }
 
@@ -51,33 +71,55 @@ export default function MediaGrid({ items }: MediaGridProps) {
 
   function selectAll() {
     setSelectedIds(new Set(items.map((item) => item.id)));
+    items.forEach((item) => prefetch(item.id));
   }
 
   function clearSelection() {
     setSelectedIds(new Set());
   }
 
-  function selectedEntries() {
-    return items
-      .filter((item) => selectedIds.has(item.id))
-      .map((item) => ({
-        url: publicMediaUrl(item.storage_key),
-        filename: item.storage_key.split('/').pop() ?? 'media',
-      }));
+  function selectedItems(): MediaItem[] {
+    return items.filter((item) => selectedIds.has(item.id));
   }
 
-  async function downloadSelected() {
+  /** Files already fetched for every currently-selected item, or null if any are still missing. */
+  function cachedSelectedFiles(): File[] | null {
+    const files: File[] = [];
+    for (const item of selectedItems()) {
+      const file = fileCacheRef.current.get(item.id);
+      if (!file) return null;
+      files.push(file);
+    }
+    return files;
+  }
+
+  async function shareOrOpenSelected(setBusy: (busy: boolean) => void) {
+    const entries = selectedItems().map(entryFor);
+    const ready = cachedSelectedFiles();
+
+    if (ready) {
+      // Nothing awaited yet in this call — share() fires in the same tick as the click.
+      const handled = await shareFilesSync(ready);
+      if (!handled) entries.forEach((entry) => openDirectly(entry.url));
+      return;
+    }
+
+    setBusy(true);
+    const files = await Promise.all(entries.map(fetchFile));
+    const validFiles = files.filter((file): file is File => file !== null);
+    const handled = validFiles.length > 0 ? await shareFilesSync(validFiles) : false;
+    if (!handled) entries.forEach((entry) => openDirectly(entry.url));
+    setBusy(false);
+  }
+
+  function downloadSelected() {
     if (isDownloading) return;
-    setIsDownloading(true);
-    await saveMediaFiles(selectedEntries());
-    setIsDownloading(false);
+    shareOrOpenSelected(setIsDownloading);
   }
 
-  async function shareSelected() {
+  function shareSelected() {
     if (isSharing) return;
-    setIsSharing(true);
-    await shareMediaFiles(selectedEntries());
-    setIsSharing(false);
+    shareOrOpenSelected(setIsSharing);
   }
 
   if (items.length === 0) {

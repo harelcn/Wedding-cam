@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MediaItem } from '../types';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
-import { saveMediaFile } from '../lib/saveMedia';
+import { fetchFile, openDirectly, shareFilesSync } from '../lib/saveMedia';
 import { CloseIcon, DownloadIcon } from './icons';
 
 interface MediaViewerProps {
@@ -12,6 +12,13 @@ interface MediaViewerProps {
 
 const CLOSE_SWIPE_THRESHOLD_PX = 90;
 
+function entryFor(item: MediaItem) {
+  return {
+    url: publicMediaUrl(item.storage_key),
+    filename: item.storage_key.split('/').pop() ?? 'media',
+  };
+}
+
 export default function MediaViewer({ items, initialIndex, onClose }: MediaViewerProps) {
   const [index, setIndex] = useState(initialIndex);
   const [dragX, setDragX] = useState(0);
@@ -20,6 +27,7 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const [isSaving, setIsSaving] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
+  const fileCacheRef = useRef<Map<number, File | null>>(new Map());
 
   useEffect(() => {
     function handleResize() {
@@ -28,6 +36,21 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    // Prefetch the current item (and its neighbors) as soon as it's shown, so
+    // the save button can share() synchronously with an already-ready file —
+    // Safari drops navigator.share() once any network wait separates it from
+    // the user's tap.
+    [index - 1, index, index + 1].forEach((i) => {
+      if (i < 0 || i >= items.length || fileCacheRef.current.has(i)) return;
+      const item = items[i];
+      fileCacheRef.current.set(i, null);
+      fetchFile(entryFor(item)).then((file) => {
+        fileCacheRef.current.set(i, file);
+      });
+    });
+  }, [index, items]);
 
   function handlePointerDown(event: React.PointerEvent) {
     startRef.current = { x: event.clientX, y: event.clientY };
@@ -61,18 +84,27 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
     setDragY(0);
   }
 
-  async function handleSave() {
+  function handleSave() {
     if (isSaving) return;
-    setIsSaving(true);
-    const item = items[index];
-    const url = publicMediaUrl(item.storage_key);
-    const filename = item.storage_key.split('/').pop() ?? 'media';
-    try {
-      await saveMediaFile(url, filename);
-    } catch {
-      // Nothing meaningful to show the user here beyond letting them try again
+    const url = publicMediaUrl(items[index].storage_key);
+    const cached = fileCacheRef.current.get(index);
+
+    if (cached) {
+      // Already fetched — share synchronously, right in this click handler.
+      shareFilesSync([cached]).then((handled) => {
+        if (!handled) openDirectly(url);
+      });
+      return;
     }
-    setIsSaving(false);
+
+    // Not ready yet (opened and tapped save before prefetch finished) — best
+    // effort: wait for it, though the delay may cost us the share() window.
+    setIsSaving(true);
+    fetchFile(entryFor(items[index])).then(async (file) => {
+      const handled = file ? await shareFilesSync([file]) : false;
+      if (!handled) openDirectly(url);
+      setIsSaving(false);
+    });
   }
 
   const trackOffset = -index * viewportWidth + dragX;
