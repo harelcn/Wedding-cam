@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import type { MediaItem } from '../types';
 import MediaGridItem from './MediaGridItem';
+import MediaViewer from './MediaViewer';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
-import { DownloadIcon, CameraIcon } from './icons';
+import { DownloadIcon, CameraIcon, CloseIcon } from './icons';
 
 interface MediaGridProps {
   items: MediaItem[];
 }
 
 export default function MediaGrid({ items }: MediaGridProps) {
+  const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
+  const [openItem, setOpenItem] = useState<MediaItem | null>(null);
 
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
@@ -22,6 +25,26 @@ export default function MediaGrid({ items }: MediaGridProps) {
       }
       return next;
     });
+  }
+
+  function handleTap(item: MediaItem) {
+    if (selectMode) {
+      toggleSelected(item.id);
+    } else {
+      setOpenItem(item);
+    }
+  }
+
+  function handleLongPress(item: MediaItem) {
+    if (!selectMode) {
+      setSelectMode(true);
+      setSelectedIds(new Set([item.id]));
+    }
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
   }
 
   function selectAll() {
@@ -65,24 +88,32 @@ export default function MediaGrid({ items }: MediaGridProps) {
 
   return (
     <div className="media-grid-wrapper">
-      <div className="media-grid-toolbar">
-        <button type="button" className="secondary" onClick={selectAll}>בחר הכל</button>
-        <button type="button" className="secondary" onClick={clearSelection}>נקה בחירה</button>
-        <button type="button" onClick={downloadSelected} disabled={selectedIds.size === 0 || isDownloading}>
-          <DownloadIcon size={16} />
-          {selectedIds.size > 0 ? `הורד (${selectedIds.size})` : 'הורד'}
-        </button>
-      </div>
+      {selectMode && (
+        <div className="media-grid-toolbar">
+          <button type="button" className="icon-button" onClick={exitSelectMode} aria-label="צא ממצב בחירה">
+            <CloseIcon size={16} />
+          </button>
+          <button type="button" className="secondary" onClick={selectAll}>בחר הכל</button>
+          <button type="button" className="secondary" onClick={clearSelection}>נקה בחירה</button>
+          <button type="button" onClick={downloadSelected} disabled={selectedIds.size === 0 || isDownloading}>
+            <DownloadIcon size={16} />
+            {selectedIds.size > 0 ? `הורד (${selectedIds.size})` : 'הורד'}
+          </button>
+        </div>
+      )}
       <div className="media-grid">
         {items.map((item) => (
           <MediaGridItem
             key={item.id}
             item={item}
             selected={selectedIds.has(item.id)}
-            onToggle={() => toggleSelected(item.id)}
+            selectMode={selectMode}
+            onTap={() => handleTap(item)}
+            onLongPress={() => handleLongPress(item)}
           />
         ))}
       </div>
+      {openItem && <MediaViewer item={openItem} onClose={() => setOpenItem(null)} />}
     </div>
   );
 }

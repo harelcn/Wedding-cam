@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { getMyFolders } from '../lib/myFolders';
-import { FolderIcon, ArrowStartIcon } from '../components/icons';
+import { FolderIcon, ArrowStartIcon, HomeIcon } from '../components/icons';
 
 export default function MyFolders() {
   const folders = getMyFolders();
@@ -8,6 +8,10 @@ export default function MyFolders() {
   if (folders.length === 0) {
     return (
       <main className="my-folders">
+        <Link to="/" className="back-link">
+          <HomeIcon size={16} />
+          חזרה לדף הבית
+        </Link>
         <h1>התיקיות שלי</h1>
         <div className="empty-state">
           <FolderIcon size={40} />
@@ -19,6 +23,10 @@ export default function MyFolders() {
 
   return (
     <main className="my-folders">
+      <Link to="/" className="back-link">
+        <HomeIcon size={16} />
+        חזרה לדף הבית
+      </Link>
       <h1>התיקיות שלי</h1>
       <ul className="folder-list">
         {folders.map((folder) => (

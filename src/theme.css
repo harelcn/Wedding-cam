@@ -415,11 +415,12 @@ main.join-folder {
 
 .media-grid-toolbar {
   display: flex;
+  align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
 }
 
-.media-grid-toolbar button {
+.media-grid-toolbar button:not(.icon-button) {
   flex: 1;
   padding: 0.7rem 1rem;
   font-size: 0.85rem;
@@ -441,6 +442,10 @@ main.join-folder {
   overflow: hidden;
   background: var(--color-surface);
   box-shadow: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 
 .media-grid-item img,
@@ -488,6 +493,34 @@ main.join-folder {
   text-align: center;
   color: var(--color-text-muted);
   padding: var(--space-6) var(--space-4);
+}
+
+/* Media viewer (full-size lightbox) */
+
+.media-viewer {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.media-viewer img,
+.media-viewer video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.media-viewer-close {
+  position: absolute;
+  top: var(--space-5);
+  inset-inline-end: var(--space-5);
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
 }
 
 /* QR scanner */
@@ -562,6 +595,20 @@ main.join-folder {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.camera-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: #fff;
+  animation: camera-flash-fade 0.2s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes camera-flash-fade {
+  0% { opacity: 0.85; }
+  100% { opacity: 0; }
 }
 
 .camera-top-bar {
@@ -643,6 +690,42 @@ main.join-folder {
   color: #000;
 }
 
+.camera-shutter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 300px;
+}
+
+.camera-preview-thumb,
+.camera-shutter-row-spacer {
+  width: 48px;
+  height: 48px;
+  flex: none;
+}
+
+.camera-preview-thumb {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.3);
+  animation: camera-preview-pop 0.2s ease-out;
+}
+
+.camera-preview-thumb img,
+.camera-preview-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+@keyframes camera-preview-pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 .camera-shutter {
   width: 76px;
   height: 76px;
@@ -654,6 +737,7 @@ main.join-folder {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: none;
 }
 
 .camera-shutter-inner {

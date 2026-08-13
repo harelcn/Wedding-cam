@@ -36,6 +36,22 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
   const [useFallback, setUseFallback] = useState(false);
   const [mode, setMode] = useState<CaptureMode>('photo');
   const [recordedSeconds, setRecordedSeconds] = useState(0);
+  const [showFlash, setShowFlash] = useState(false);
+  const [preview, setPreview] = useState<{ url: string; type: CaptureMode } | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  function setPreviewFromBlob(blob: Blob, type: CaptureMode) {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    const url = URL.createObjectURL(blob);
+    previewUrlRef.current = url;
+    setPreview({ url, type });
+  }
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,8 +95,15 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    setShowFlash(true);
+    window.setTimeout(() => setShowFlash(false), 200);
+
     canvas.toBlob((blob) => {
-      if (blob) onPhoto(blob);
+      if (blob) {
+        setPreviewFromBlob(blob, 'photo');
+        onPhoto(blob);
+      }
     }, 'image/jpeg', 0.82);
   }
 
@@ -96,6 +119,7 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
     };
     recorder.onstop = () => {
       const blob = new Blob(recordedChunksRef.current, { type: baseType });
+      setPreviewFromBlob(blob, 'video');
       onVideo(blob);
     };
     recorder.start();
@@ -169,6 +193,7 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
   return (
     <div className="camera-capture">
       <video ref={videoRef} muted playsInline />
+      {showFlash && <div className="camera-flash" />}
 
       <div className="camera-top-bar">
         <button
@@ -209,14 +234,28 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
           </button>
         </div>
 
-        <button
-          type="button"
-          className={`camera-shutter${isRecording ? ' recording' : ''}`}
-          onClick={handleShutterClick}
-          aria-label={mode === 'photo' ? 'צלם תמונה' : isRecording ? 'עצור הקלטה' : 'התחל הקלטה'}
-        >
-          <span className="camera-shutter-inner" />
-        </button>
+        <div className="camera-shutter-row">
+          <div className="camera-preview-thumb">
+            {preview && (
+              preview.type === 'photo' ? (
+                <img src={preview.url} alt="" />
+              ) : (
+                <video src={preview.url} muted />
+              )
+            )}
+          </div>
+
+          <button
+            type="button"
+            className={`camera-shutter${isRecording ? ' recording' : ''}`}
+            onClick={handleShutterClick}
+            aria-label={mode === 'photo' ? 'צלם תמונה' : isRecording ? 'עצור הקלטה' : 'התחל הקלטה'}
+          >
+            <span className="camera-shutter-inner" />
+          </button>
+
+          <div className="camera-shutter-row-spacer" />
+        </div>
       </div>
     </div>
   );
