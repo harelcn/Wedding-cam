@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { MediaItem } from '../types';
 import MediaGridItem from './MediaGridItem';
 import MediaViewer from './MediaViewer';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
-import { downloadMany, isShareSupported, shareMany, type MediaDownloadEntry } from '../lib/saveMedia';
+import { isShareSupported, prepareFile, shareEntriesSync, type MediaDownloadEntry } from '../lib/saveMedia';
 import { DownloadIcon, CameraIcon, CloseIcon, ShareIcon } from './icons';
 
 interface MediaGridProps {
@@ -14,6 +14,7 @@ function entryFor(item: MediaItem): MediaDownloadEntry {
   return {
     url: publicMediaUrl(item.storage_key),
     filename: item.storage_key.split('/').pop() ?? 'media',
+    type: item.type,
   };
 }
 
@@ -21,14 +22,25 @@ export default function MediaGrid({ items }: MediaGridProps) {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const fileCacheRef = useRef<Map<string, File | null>>(new Map());
 
-  function toggleSelected(id: string) {
+  function prefetch(item: MediaItem) {
+    const entry = entryFor(item);
+    if (fileCacheRef.current.has(entry.url)) return;
+    fileCacheRef.current.set(entry.url, null);
+    prepareFile(entry).then((file) => {
+      fileCacheRef.current.set(entry.url, file);
+    });
+  }
+
+  function toggleSelected(item: MediaItem) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+      if (next.has(item.id)) {
+        next.delete(item.id);
       } else {
-        next.add(id);
+        next.add(item.id);
+        prefetch(item);
       }
       return next;
     });
@@ -36,7 +48,7 @@ export default function MediaGrid({ items }: MediaGridProps) {
 
   function handleTap(item: MediaItem, index: number) {
     if (selectMode) {
-      toggleSelected(item.id);
+      toggleSelected(item);
     } else {
       setOpenIndex(index);
     }
@@ -46,6 +58,7 @@ export default function MediaGrid({ items }: MediaGridProps) {
     if (!selectMode) {
       setSelectMode(true);
       setSelectedIds(new Set([item.id]));
+      prefetch(item);
     }
   }
 
@@ -56,6 +69,7 @@ export default function MediaGrid({ items }: MediaGridProps) {
 
   function selectAll() {
     setSelectedIds(new Set(items.map((item) => item.id)));
+    items.forEach(prefetch);
   }
 
   function clearSelection() {
@@ -67,11 +81,11 @@ export default function MediaGrid({ items }: MediaGridProps) {
   }
 
   function downloadSelected() {
-    downloadMany(selectedEntries());
+    shareEntriesSync(selectedEntries(), fileCacheRef.current);
   }
 
   function shareSelected() {
-    shareMany(selectedEntries());
+    shareEntriesSync(selectedEntries(), fileCacheRef.current);
   }
 
   if (items.length === 0) {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MediaItem } from '../types';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
-import { downloadOne, shareOne } from '../lib/saveMedia';
+import { prepareFile, shareEntriesSync, type MediaDownloadEntry } from '../lib/saveMedia';
 import { CloseIcon, DownloadIcon, ShareIcon } from './icons';
 
 interface MediaViewerProps {
@@ -12,10 +12,11 @@ interface MediaViewerProps {
 
 const CLOSE_SWIPE_THRESHOLD_PX = 90;
 
-function entryFor(item: MediaItem) {
+function entryFor(item: MediaItem): MediaDownloadEntry {
   return {
     url: publicMediaUrl(item.storage_key),
     filename: item.storage_key.split('/').pop() ?? 'media',
+    type: item.type,
   };
 }
 
@@ -26,6 +27,7 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
   const [isDragging, setIsDragging] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const startRef = useRef<{ x: number; y: number } | null>(null);
+  const fileCacheRef = useRef<Map<string, File | null>>(new Map());
 
   useEffect(() => {
     function handleResize() {
@@ -34,6 +36,21 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    // Prepare the current item (and neighbors) as soon as it's shown, so the
+    // share/save buttons can hand navigator.share() an already-ready file —
+    // see saveMedia.ts for why this must happen ahead of the actual tap.
+    [index - 1, index, index + 1].forEach((i) => {
+      if (i < 0 || i >= items.length) return;
+      const entry = entryFor(items[i]);
+      if (fileCacheRef.current.has(entry.url)) return;
+      fileCacheRef.current.set(entry.url, null);
+      prepareFile(entry).then((file) => {
+        fileCacheRef.current.set(entry.url, file);
+      });
+    });
+  }, [index, items]);
 
   function handlePointerDown(event: React.PointerEvent) {
     startRef.current = { x: event.clientX, y: event.clientY };
@@ -67,12 +84,8 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
     setDragY(0);
   }
 
-  function handleShare() {
-    shareOne(entryFor(items[index]));
-  }
-
-  function handleSave() {
-    downloadOne(entryFor(items[index]));
+  function handleShareOrSave() {
+    shareEntriesSync([entryFor(items[index])], fileCacheRef.current);
   }
 
   const trackOffset = -index * viewportWidth + dragX;
@@ -84,13 +97,18 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
           <CloseIcon />
         </button>
         <div className="media-viewer-actions-group">
-          <button type="button" className="icon-button media-viewer-action" onClick={handleShare} aria-label="שתף">
+          <button
+            type="button"
+            className="icon-button media-viewer-action"
+            onClick={handleShareOrSave}
+            aria-label="שתף"
+          >
             <ShareIcon />
           </button>
           <button
             type="button"
             className="icon-button media-viewer-action"
-            onClick={handleSave}
+            onClick={handleShareOrSave}
             aria-label="שמור לגלריה"
           >
             <DownloadIcon />

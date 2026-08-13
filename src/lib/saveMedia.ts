@@ -1,6 +1,7 @@
 export interface MediaDownloadEntry {
   url: string;
   filename: string;
+  type: 'image' | 'video';
 }
 
 function isDebugMode(): boolean {
@@ -11,53 +12,124 @@ function debugAlert(message: string): void {
   if (isDebugMode()) alert(`דיבוג: ${message}`);
 }
 
+function loadImageElement(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('image element failed to load'));
+    img.src = url;
+  });
+}
+
+/**
+ * Loads the image through a plain <img> tag and re-encodes it via canvas,
+ * instead of fetch(). On at least one real device this app has been tested
+ * on, fetch() to our storage host throws "TypeError: Load failed" (likely a
+ * content blocker or privacy feature) even though the exact same URL loads
+ * fine as a normal image resource — this sidesteps that entirely, since
+ * image loading doesn't go through the Fetch API.
+ */
+async function imageToFile(url: string, filename: string): Promise<File | null> {
+  try {
+    const img = await loadImageElement(url);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    return blob ? new File([blob], filename, { type: 'image/jpeg' }) : null;
+  } catch (err) {
+    debugAlert(`טעינת <img> נכשלה: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+async function fetchFile(url: string, filename: string): Promise<File | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      debugAlert(`fetch חזר סטטוס ${response.status}`);
+      return null;
+    }
+    const blob = await response.blob();
+    return new File([blob], filename, { type: blob.type || undefined });
+  } catch (err) {
+    debugAlert(`fetch נכשל: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
+    return null;
+  }
+}
+
+/** Best-effort: produces an actual File for the item, trying the method most likely to work first. */
+export async function prepareFile(entry: MediaDownloadEntry): Promise<File | null> {
+  if (entry.type === 'image') {
+    const viaCanvas = await imageToFile(entry.url, entry.filename);
+    if (viaCanvas) return viaCanvas;
+  }
+  return fetchFile(entry.url, entry.filename);
+}
+
 export function isShareSupported(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 }
 
-/**
- * Opens the real file URL directly — lets the user save/share it via the
- * browser's own native UI (long-press, or the browser's share icon).
- */
 export function openDirectly(url: string): void {
   window.open(url, '_blank', 'noopener');
 }
 
 /**
- * Shares a single item's direct URL (opens the native share sheet — e.g.
- * WhatsApp) instead of fetching the file into a Blob first. Fetching has
- * proven unreliable on some real devices/networks even when the same URL
- * loads fine via normal navigation, and URL sharing needs no fetch at all,
- * so it isn't affected by whatever is blocking those fetches.
+ * Call synchronously inside a click handler with files already prepared
+ * ahead of time (via prepareFile, cached before the tap) — Safari silently
+ * drops navigator.share() once any async work separates it from the user's
+ * original tap.
  */
-export function shareOne(entry: MediaDownloadEntry, title?: string): void {
+function shareFilesSync(files: File[]): Promise<boolean> {
+  if (files.length === 0 || !isShareSupported() || !navigator.canShare?.({ files })) {
+    return Promise.resolve(false);
+  }
+  return navigator
+    .share({ files })
+    .then(() => true)
+    .catch((err) => {
+      const isAbort = err instanceof Error && err.name === 'AbortError';
+      if (!isAbort) debugAlert(`share(files) נכשל: ${err instanceof Error ? err.message : String(err)}`);
+      return isAbort;
+    });
+}
+
+function shareUrlSync(entries: MediaDownloadEntry[]): void {
   if (!isShareSupported()) {
-    openDirectly(entry.url);
+    entries.forEach((entry) => openDirectly(entry.url));
     return;
   }
-  navigator.share({ url: entry.url, title }).catch((err) => {
+  const payload = entries.length === 1 ? { url: entries[0].url } : { text: entries.map((e) => e.url).join('\n') };
+  navigator.share(payload).catch((err) => {
     if (err instanceof Error && err.name === 'AbortError') return;
     debugAlert(`share(url) נכשל: ${err instanceof Error ? err.message : String(err)}`);
-    openDirectly(entry.url);
+    entries.forEach((entry) => openDirectly(entry.url));
   });
 }
 
-/** Same idea for multiple items at once — shared as a newline-separated list of links. */
-export function shareMany(entries: MediaDownloadEntry[]): void {
-  if (entries.length === 0) return;
-  if (entries.length === 1) {
-    shareOne(entries[0]);
+/**
+ * Shares already-prepared files as real attachments when available (the
+ * cache should be populated ahead of time via prepareFile so this call can
+ * stay synchronous); otherwise shares the URL(s) as a link/text fallback.
+ */
+export function shareEntriesSync(entries: MediaDownloadEntry[], fileCache: Map<string, File | null>): void {
+  const files = entries
+    .map((entry) => fileCache.get(entry.url))
+    .filter((file): file is File => !!file);
+
+  if (files.length === entries.length && files.length > 0) {
+    shareFilesSync(files).then((handled) => {
+      if (!handled) shareUrlSync(entries);
+    });
     return;
   }
-  if (!isShareSupported()) {
-    entries.forEach((entry) => openDirectly(entry.url));
-    return;
-  }
-  navigator.share({ text: entries.map((entry) => entry.url).join('\n') }).catch((err) => {
-    if (err instanceof Error && err.name === 'AbortError') return;
-    debugAlert(`share(text) נכשל: ${err instanceof Error ? err.message : String(err)}`);
-    entries.forEach((entry) => openDirectly(entry.url));
-  });
+
+  shareUrlSync(entries);
 }
 
 export function downloadOne(entry: MediaDownloadEntry): void {
