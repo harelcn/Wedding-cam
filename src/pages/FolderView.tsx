@@ -176,6 +176,7 @@ export default function FolderView() {
           <span>קוד</span>
         </button>
       </div>
+      {folderName && <h1 className="folder-view-title">{folderName}</h1>}
       {error && (
         <div className="error-banner error-toast">
           <span className="error-toast-message">
