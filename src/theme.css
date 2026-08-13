@@ -547,6 +547,11 @@ main.join-folder {
   justify-content: space-between;
 }
 
+.media-viewer-actions-group {
+  display: flex;
+  gap: var(--space-2);
+}
+
 .media-viewer-action {
   background: rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(4px);

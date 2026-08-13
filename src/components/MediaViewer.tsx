@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MediaItem } from '../types';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
-import { fetchFile, openDirectly, shareFilesSync } from '../lib/saveMedia';
-import { CloseIcon, DownloadIcon } from './icons';
+import { downloadOne, shareOne } from '../lib/saveMedia';
+import { CloseIcon, DownloadIcon, ShareIcon } from './icons';
 
 interface MediaViewerProps {
   items: MediaItem[];
@@ -25,9 +25,7 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
-  const [isSaving, setIsSaving] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
-  const fileCacheRef = useRef<Map<number, File | null>>(new Map());
 
   useEffect(() => {
     function handleResize() {
@@ -36,21 +34,6 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  useEffect(() => {
-    // Prefetch the current item (and its neighbors) as soon as it's shown, so
-    // the save button can share() synchronously with an already-ready file —
-    // Safari drops navigator.share() once any network wait separates it from
-    // the user's tap.
-    [index - 1, index, index + 1].forEach((i) => {
-      if (i < 0 || i >= items.length || fileCacheRef.current.has(i)) return;
-      const item = items[i];
-      fileCacheRef.current.set(i, null);
-      fetchFile(entryFor(item)).then((file) => {
-        fileCacheRef.current.set(i, file);
-      });
-    });
-  }, [index, items]);
 
   function handlePointerDown(event: React.PointerEvent) {
     startRef.current = { x: event.clientX, y: event.clientY };
@@ -84,27 +67,12 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
     setDragY(0);
   }
 
+  function handleShare() {
+    shareOne(entryFor(items[index]));
+  }
+
   function handleSave() {
-    if (isSaving) return;
-    const url = publicMediaUrl(items[index].storage_key);
-    const cached = fileCacheRef.current.get(index);
-
-    if (cached) {
-      // Already fetched — share synchronously, right in this click handler.
-      shareFilesSync([cached]).then((handled) => {
-        if (!handled) openDirectly(url);
-      });
-      return;
-    }
-
-    // Not ready yet (opened and tapped save before prefetch finished) — best
-    // effort: wait for it, though the delay may cost us the share() window.
-    setIsSaving(true);
-    fetchFile(entryFor(items[index])).then(async (file) => {
-      const handled = file ? await shareFilesSync([file]) : false;
-      if (!handled) openDirectly(url);
-      setIsSaving(false);
-    });
+    downloadOne(entryFor(items[index]));
   }
 
   const trackOffset = -index * viewportWidth + dragX;
@@ -115,15 +83,19 @@ export default function MediaViewer({ items, initialIndex, onClose }: MediaViewe
         <button type="button" className="icon-button media-viewer-action" onClick={onClose} aria-label="סגור">
           <CloseIcon />
         </button>
-        <button
-          type="button"
-          className="icon-button media-viewer-action"
-          onClick={handleSave}
-          disabled={isSaving}
-          aria-label="שמור לגלריה"
-        >
-          {isSaving ? <span className="spinner spinner-sm" /> : <DownloadIcon />}
-        </button>
+        <div className="media-viewer-actions-group">
+          <button type="button" className="icon-button media-viewer-action" onClick={handleShare} aria-label="שתף">
+            <ShareIcon />
+          </button>
+          <button
+            type="button"
+            className="icon-button media-viewer-action"
+            onClick={handleSave}
+            aria-label="שמור לגלריה"
+          >
+            <DownloadIcon />
+          </button>
+        </div>
       </div>
 
       <div

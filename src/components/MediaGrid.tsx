@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import type { MediaItem } from '../types';
 import MediaGridItem from './MediaGridItem';
 import MediaViewer from './MediaViewer';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
-import { fetchFile, isShareSupported, openDirectly, shareFilesSync, type MediaDownloadEntry } from '../lib/saveMedia';
+import { downloadMany, isShareSupported, shareMany, type MediaDownloadEntry } from '../lib/saveMedia';
 import { DownloadIcon, CameraIcon, CloseIcon, ShareIcon } from './icons';
 
 interface MediaGridProps {
@@ -20,20 +20,7 @@ function entryFor(item: MediaItem): MediaDownloadEntry {
 export default function MediaGrid({ items }: MediaGridProps) {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const fileCacheRef = useRef<Map<string, File | null>>(new Map());
-
-  function prefetch(id: string) {
-    if (fileCacheRef.current.has(id)) return;
-    const item = items.find((candidate) => candidate.id === id);
-    if (!item) return;
-    fileCacheRef.current.set(id, null);
-    fetchFile(entryFor(item)).then((file) => {
-      fileCacheRef.current.set(id, file);
-    });
-  }
 
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
@@ -42,7 +29,6 @@ export default function MediaGrid({ items }: MediaGridProps) {
         next.delete(id);
       } else {
         next.add(id);
-        prefetch(id);
       }
       return next;
     });
@@ -60,7 +46,6 @@ export default function MediaGrid({ items }: MediaGridProps) {
     if (!selectMode) {
       setSelectMode(true);
       setSelectedIds(new Set([item.id]));
-      prefetch(item.id);
     }
   }
 
@@ -71,55 +56,22 @@ export default function MediaGrid({ items }: MediaGridProps) {
 
   function selectAll() {
     setSelectedIds(new Set(items.map((item) => item.id)));
-    items.forEach((item) => prefetch(item.id));
   }
 
   function clearSelection() {
     setSelectedIds(new Set());
   }
 
-  function selectedItems(): MediaItem[] {
-    return items.filter((item) => selectedIds.has(item.id));
-  }
-
-  /** Files already fetched for every currently-selected item, or null if any are still missing. */
-  function cachedSelectedFiles(): File[] | null {
-    const files: File[] = [];
-    for (const item of selectedItems()) {
-      const file = fileCacheRef.current.get(item.id);
-      if (!file) return null;
-      files.push(file);
-    }
-    return files;
-  }
-
-  async function shareOrOpenSelected(setBusy: (busy: boolean) => void) {
-    const entries = selectedItems().map(entryFor);
-    const ready = cachedSelectedFiles();
-
-    if (ready) {
-      // Nothing awaited yet in this call — share() fires in the same tick as the click.
-      const handled = await shareFilesSync(ready);
-      if (!handled) entries.forEach((entry) => openDirectly(entry.url));
-      return;
-    }
-
-    setBusy(true);
-    const files = await Promise.all(entries.map(fetchFile));
-    const validFiles = files.filter((file): file is File => file !== null);
-    const handled = validFiles.length > 0 ? await shareFilesSync(validFiles) : false;
-    if (!handled) entries.forEach((entry) => openDirectly(entry.url));
-    setBusy(false);
+  function selectedEntries(): MediaDownloadEntry[] {
+    return items.filter((item) => selectedIds.has(item.id)).map(entryFor);
   }
 
   function downloadSelected() {
-    if (isDownloading) return;
-    shareOrOpenSelected(setIsDownloading);
+    downloadMany(selectedEntries());
   }
 
   function shareSelected() {
-    if (isSharing) return;
-    shareOrOpenSelected(setIsSharing);
+    shareMany(selectedEntries());
   }
 
   if (items.length === 0) {
@@ -141,14 +93,14 @@ export default function MediaGrid({ items }: MediaGridProps) {
           <button type="button" className="secondary" onClick={selectAll}>בחר הכל</button>
           <button type="button" className="secondary" onClick={clearSelection}>נקה בחירה</button>
           {isShareSupported() && (
-            <button type="button" onClick={shareSelected} disabled={selectedIds.size === 0 || isSharing}>
-              {isSharing ? <span className="spinner spinner-sm" /> : <ShareIcon size={16} />}
-              {isSharing ? 'משתף...' : 'שתף'}
+            <button type="button" onClick={shareSelected} disabled={selectedIds.size === 0}>
+              <ShareIcon size={16} />
+              שתף
             </button>
           )}
-          <button type="button" onClick={downloadSelected} disabled={selectedIds.size === 0 || isDownloading}>
-            {isDownloading ? <span className="spinner spinner-sm" /> : <DownloadIcon size={16} />}
-            {isDownloading ? 'מוריד...' : selectedIds.size > 0 ? `הורד (${selectedIds.size})` : 'הורד'}
+          <button type="button" onClick={downloadSelected} disabled={selectedIds.size === 0}>
+            <DownloadIcon size={16} />
+            {selectedIds.size > 0 ? `הורד (${selectedIds.size})` : 'הורד'}
           </button>
         </div>
       )}
