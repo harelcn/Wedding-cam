@@ -26,6 +26,10 @@ export function canShareFiles(files: File[]): boolean {
   return files.length > 0 && isShareSupported() && !!navigator.canShare?.({ files });
 }
 
+function isDebugMode(): boolean {
+  return typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
+}
+
 /**
  * Call this synchronously inside a click handler, with files that were
  * already fetched ahead of time (no `await` before this call). Safari
@@ -34,13 +38,30 @@ export function canShareFiles(files: File[]): boolean {
  * lose that window, which is why every file here must be pre-fetched.
  */
 export function shareFilesSync(files: File[]): Promise<boolean> {
-  if (!canShareFiles(files)) return Promise.resolve(false);
+  if (files.length === 0) {
+    if (isDebugMode()) alert('דיבוג: אין קבצים לשיתוף');
+    return Promise.resolve(false);
+  }
+  if (!isShareSupported()) {
+    if (isDebugMode()) alert('דיבוג: navigator.share לא קיים בדפדפן הזה');
+    return Promise.resolve(false);
+  }
+  const filesDescription = files.map((f) => `${f.name} (${f.type || 'no-type'}, ${f.size}B)`).join(', ');
+  if (!navigator.canShare?.({ files })) {
+    if (isDebugMode()) alert(`דיבוג: canShare החזיר false עבור: ${filesDescription}`);
+    return Promise.resolve(false);
+  }
   return navigator
     .share({ files })
     .then(() => true)
     .catch((err) => {
+      const isAbort = err instanceof Error && err.name === 'AbortError';
+      if (isDebugMode() && !isAbort) {
+        const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        alert(`דיבוג: share() נכשל: ${message}\nקבצים: ${filesDescription}`);
+      }
       // A deliberate user cancel still counts as "handled"
-      return err instanceof Error && err.name === 'AbortError';
+      return isAbort;
     });
 }
 
