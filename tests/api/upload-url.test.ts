@@ -92,4 +92,24 @@ describe('POST /api/upload-url', () => {
     expect(payload.uploadUrl).toBe('https://example-signed-url.test');
     expect(payload.storageKey).toMatch(/^f1\/.+\.jpg$/);
   });
+
+  it('prefixes the storage key with a sanitized folder name when provided', async () => {
+    const req: any = {
+      method: 'POST',
+      body: { folderId: 'f1', contentType: 'image/jpeg', folderName: '  בדיקה/עיצוב  ' },
+    };
+    const res = createMockRes();
+    await handler(req, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.storageKey).toMatch(/^בדיקה-עיצוב-f1\/.+\.jpg$/);
+  });
+
+  it('falls back to the plain folderId when no folder name is given', async () => {
+    const req: any = { method: 'POST', body: { folderId: 'f1', contentType: 'image/jpeg', folderName: '' } };
+    const res = createMockRes();
+    await handler(req, res);
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.storageKey).toMatch(/^f1\/.+\.jpg$/);
+  });
 });

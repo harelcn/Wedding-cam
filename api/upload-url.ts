@@ -11,6 +11,15 @@ const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   'video/quicktime': 'mov',
 };
 
+function sanitizeFolderNameForPath(name: string): string {
+  return name
+    .trim()
+    .replace(/[/\\]/g, '-')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f]/g, '')
+    .slice(0, 40);
+}
+
 async function folderExists(folderId: string): Promise<boolean> {
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -43,7 +52,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { folderId, contentType } = (req.body ?? {}) as { folderId?: string; contentType?: string };
+  const { folderId, contentType, folderName } = (req.body ?? {}) as {
+    folderId?: string;
+    contentType?: string;
+    folderName?: string;
+  };
   const extension = contentType ? EXTENSION_BY_CONTENT_TYPE[contentType] : undefined;
 
   if (!folderId || !contentType || !extension) {
@@ -57,7 +70,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const mediaId = randomUUID();
-  const storageKey = `${folderId}/${mediaId}.${extension}`;
+  const sanitizedName = folderName ? sanitizeFolderNameForPath(folderName) : '';
+  const folderPrefix = sanitizedName ? `${sanitizedName}-${folderId}` : folderId;
+  const storageKey = `${folderPrefix}/${mediaId}.${extension}`;
 
   const client = getR2Client();
   const command = new PutObjectCommand({

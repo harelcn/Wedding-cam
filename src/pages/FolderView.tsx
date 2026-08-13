@@ -98,7 +98,7 @@ export default function FolderView() {
       const response = await fetch('/api/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderId, contentType }),
+        body: JSON.stringify({ folderId, contentType, folderName }),
       });
 
       if (!response.ok) {
