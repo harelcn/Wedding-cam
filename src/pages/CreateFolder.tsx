@@ -5,6 +5,7 @@ import { getDeviceId } from '../lib/deviceId';
 import { addMyFolder } from '../lib/myFolders';
 import { generateQrDataUrl } from '../lib/qrCode';
 import { buildJoinUrl } from '../lib/joinUrl';
+import { shareDataUrlImage } from '../lib/saveMedia';
 import { ShareIcon, AlertIcon } from '../components/icons';
 
 export default function CreateFolder() {
@@ -54,22 +55,7 @@ export default function CreateFolder() {
 
   async function handleShare() {
     if (!qrDataUrl) return;
-    const response = await fetch(qrDataUrl);
-    const blob = await response.blob();
-    const file = new File([blob], 'qr-code.png', { type: 'image/png' });
-
-    try {
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: name });
-      } else {
-        const link = document.createElement('a');
-        link.href = qrDataUrl;
-        link.download = 'qr-code.png';
-        link.click();
-      }
-    } catch {
-      // User cancelled the native share sheet — not an error worth surfacing
-    }
+    await shareDataUrlImage(qrDataUrl, 'qr-code.png', name);
   }
 
   if (folderId && qrDataUrl) {

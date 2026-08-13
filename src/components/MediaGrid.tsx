@@ -3,8 +3,8 @@ import type { MediaItem } from '../types';
 import MediaGridItem from './MediaGridItem';
 import MediaViewer from './MediaViewer';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
-import { saveMediaFile } from '../lib/saveMedia';
-import { DownloadIcon, CameraIcon, CloseIcon } from './icons';
+import { isShareSupported, saveMediaFiles, shareMediaFiles } from '../lib/saveMedia';
+import { DownloadIcon, CameraIcon, CloseIcon, ShareIcon } from './icons';
 
 interface MediaGridProps {
   items: MediaItem[];
@@ -14,6 +14,7 @@ export default function MediaGrid({ items }: MediaGridProps) {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   function toggleSelected(id: string) {
@@ -56,22 +57,27 @@ export default function MediaGrid({ items }: MediaGridProps) {
     setSelectedIds(new Set());
   }
 
+  function selectedEntries() {
+    return items
+      .filter((item) => selectedIds.has(item.id))
+      .map((item) => ({
+        url: publicMediaUrl(item.storage_key),
+        filename: item.storage_key.split('/').pop() ?? 'media',
+      }));
+  }
+
   async function downloadSelected() {
     if (isDownloading) return;
     setIsDownloading(true);
-
-    const selectedItems = items.filter((item) => selectedIds.has(item.id));
-    for (const item of selectedItems) {
-      try {
-        const url = publicMediaUrl(item.storage_key);
-        const filename = item.storage_key.split('/').pop() ?? 'media';
-        await saveMediaFile(url, filename);
-      } catch {
-        // Skip this item and keep going with the rest of the selection
-      }
-    }
-
+    await saveMediaFiles(selectedEntries());
     setIsDownloading(false);
+  }
+
+  async function shareSelected() {
+    if (isSharing) return;
+    setIsSharing(true);
+    await shareMediaFiles(selectedEntries());
+    setIsSharing(false);
   }
 
   if (items.length === 0) {
@@ -92,6 +98,12 @@ export default function MediaGrid({ items }: MediaGridProps) {
           </button>
           <button type="button" className="secondary" onClick={selectAll}>בחר הכל</button>
           <button type="button" className="secondary" onClick={clearSelection}>נקה בחירה</button>
+          {isShareSupported() && (
+            <button type="button" onClick={shareSelected} disabled={selectedIds.size === 0 || isSharing}>
+              <ShareIcon size={16} />
+              שתף
+            </button>
+          )}
           <button type="button" onClick={downloadSelected} disabled={selectedIds.size === 0 || isDownloading}>
             <DownloadIcon size={16} />
             {selectedIds.size > 0 ? `הורד (${selectedIds.size})` : 'הורד'}

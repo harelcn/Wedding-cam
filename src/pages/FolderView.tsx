@@ -4,16 +4,42 @@ import { supabase } from '../lib/supabaseClient';
 import { getDeviceId } from '../lib/deviceId';
 import { compressImage } from '../lib/compressImage';
 import { getVideoDuration, MAX_VIDEO_DURATION_SECONDS } from '../lib/videoDuration';
+import { generateQrDataUrl } from '../lib/qrCode';
+import { buildJoinUrl } from '../lib/joinUrl';
+import { shareDataUrlImage } from '../lib/saveMedia';
 import CameraCapture from '../components/CameraCapture';
 import MediaGrid from '../components/MediaGrid';
 import type { MediaItem } from '../types';
-import { AlertIcon, ArrowStartIcon, CameraIcon, CloseIcon, UploadIcon } from '../components/icons';
+import {
+  AlertIcon,
+  ArrowStartIcon,
+  CameraIcon,
+  CloseIcon,
+  QrCodeIcon,
+  ShareIcon,
+  UploadIcon,
+} from '../components/icons';
 
 export default function FolderView() {
   const { folderId } = useParams<{ folderId: string }>();
+  const [folderName, setFolderName] = useState<string>('');
   const [items, setItems] = useState<MediaItem[]>([]);
   const [showCamera, setShowCamera] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [showQr, setShowQr] = useState(false);
+
+  useEffect(() => {
+    if (!folderId) return;
+    supabase
+      .from('folders')
+      .select('name')
+      .eq('id', folderId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setFolderName(data.name);
+      });
+  }, [folderId]);
 
   useEffect(() => {
     if (!folderId) return;
@@ -125,12 +151,31 @@ export default function FolderView() {
     }
   }
 
+  async function handleOpenQr() {
+    if (!folderId) return;
+    if (!qrDataUrl) {
+      setQrDataUrl(await generateQrDataUrl(buildJoinUrl(folderId)));
+    }
+    setShowQr(true);
+  }
+
+  async function handleShareQr() {
+    if (!qrDataUrl) return;
+    await shareDataUrlImage(qrDataUrl, 'qr-code.png', folderName);
+  }
+
   return (
     <main className="folder-view">
-      <Link to="/my-folders" className="back-link">
-        <ArrowStartIcon size={16} />
-        חזרה לתיקיות שלי
-      </Link>
+      <div className="folder-view-top-bar">
+        <Link to="/my-folders" className="back-link">
+          <ArrowStartIcon size={16} />
+          חזרה לתיקיות שלי
+        </Link>
+        <button type="button" className="qr-quick-button" onClick={handleOpenQr}>
+          <QrCodeIcon size={20} />
+          <span>קוד</span>
+        </button>
+      </div>
       {error && (
         <div className="error-banner error-toast">
           <span className="error-toast-message">
@@ -161,6 +206,28 @@ export default function FolderView() {
         />
       )}
       <MediaGrid items={items} />
+      {showQr && qrDataUrl && (
+        <div className="qr-modal-overlay" onClick={() => setShowQr(false)}>
+          <div className="qr-modal-card card" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="icon-button qr-modal-close"
+              onClick={() => setShowQr(false)}
+              aria-label="סגור"
+            >
+              <CloseIcon size={16} />
+            </button>
+            <h2>{folderName}</h2>
+            <div className="qr-card">
+              <img src={qrDataUrl} alt="קוד QR להצטרפות לתיקייה" />
+            </div>
+            <button type="button" onClick={handleShareQr}>
+              <ShareIcon size={18} />
+              שתף
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
