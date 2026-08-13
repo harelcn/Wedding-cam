@@ -3,6 +3,7 @@ import type { MediaItem } from '../types';
 import MediaGridItem from './MediaGridItem';
 import MediaViewer from './MediaViewer';
 import { publicMediaUrl } from '../lib/publicMediaUrl';
+import { saveMediaFile } from '../lib/saveMedia';
 import { DownloadIcon, CameraIcon, CloseIcon } from './icons';
 
 interface MediaGridProps {
@@ -60,38 +61,13 @@ export default function MediaGrid({ items }: MediaGridProps) {
     setIsDownloading(true);
 
     const selectedItems = items.filter((item) => selectedIds.has(item.id));
-    const files: File[] = [];
     for (const item of selectedItems) {
       try {
         const url = publicMediaUrl(item.storage_key);
-        const response = await fetch(url);
-        const blob = await response.blob();
         const filename = item.storage_key.split('/').pop() ?? 'media';
-        files.push(new File([blob], filename, { type: blob.type || undefined }));
+        await saveMediaFile(url, filename);
       } catch {
-        // Skip files that failed to fetch
-      }
-    }
-
-    let handledByShare = false;
-    if (navigator.share && navigator.canShare?.({ files })) {
-      try {
-        await navigator.share({ files });
-        handledByShare = true;
-      } catch (err) {
-        // A deliberate user cancel shouldn't fall back to force-downloading everything
-        handledByShare = err instanceof Error && err.name === 'AbortError';
-      }
-    }
-
-    if (!handledByShare) {
-      for (const file of files) {
-        const objectUrl = URL.createObjectURL(file);
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        link.download = file.name;
-        link.click();
-        URL.revokeObjectURL(objectUrl);
+        // Skip this item and keep going with the rest of the selection
       }
     }
 

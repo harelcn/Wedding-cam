@@ -478,28 +478,49 @@ main.join-folder {
 .media-viewer {
   position: fixed;
   inset: 0;
-  background: #000;
+  background: var(--color-olive);
+  background-image: radial-gradient(ellipse at top, var(--color-olive) 0%, var(--color-olive-darker) 120%);
   z-index: 55;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
   touch-action: none;
 }
 
-.media-viewer img,
-.media-viewer video {
+.media-viewer-top-bar {
+  position: absolute;
+  top: var(--space-5);
+  inset-inline: var(--space-5);
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+}
+
+.media-viewer-action {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+}
+
+.media-viewer-track {
+  display: flex;
+  height: 100%;
+  direction: ltr;
+}
+
+.media-viewer-slide {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6) var(--space-4);
+}
+
+.media-viewer-slide img,
+.media-viewer-slide video {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-}
-
-.media-viewer-close {
-  position: absolute;
-  top: var(--space-5);
-  inset-inline-end: var(--space-5);
-  z-index: 2;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
+  border-radius: var(--radius-md);
 }
 
 /* QR scanner */
