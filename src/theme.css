@@ -655,6 +655,10 @@ main.join-folder {
   object-fit: cover;
 }
 
+.camera-capture video.mirrored {
+  transform: scaleX(-1);
+}
+
 .camera-flash {
   position: absolute;
   inset: 0;
@@ -724,30 +728,6 @@ main.join-folder {
   background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent);
 }
 
-.camera-mode-toggle {
-  display: inline-flex;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  border-radius: var(--radius-full);
-  padding: 4px;
-  gap: 4px;
-}
-
-.camera-mode-toggle button {
-  background: transparent;
-  box-shadow: none;
-  padding: 0.5rem 1.1rem;
-  border-radius: var(--radius-full);
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--color-text-muted);
-}
-
-.camera-mode-toggle button.active {
-  background: #fff;
-  color: #000;
-}
-
 .camera-shutter-row {
   display: flex;
   align-items: center;
@@ -757,10 +737,16 @@ main.join-folder {
 }
 
 .camera-preview-thumb,
-.camera-shutter-row-spacer {
+.camera-flip-button {
   width: 48px;
   height: 48px;
   flex: none;
+}
+
+.camera-flip-button {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  border-radius: 50%;
 }
 
 .camera-preview-thumb {
@@ -796,6 +782,7 @@ main.join-folder {
   align-items: center;
   justify-content: center;
   flex: none;
+  touch-action: none;
 }
 
 .camera-shutter-inner {

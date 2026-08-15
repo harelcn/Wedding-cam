@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { compressImage } from '../lib/compressImage';
 import { MAX_VIDEO_DURATION_SECONDS } from '../lib/videoDuration';
-import { CloseIcon } from './icons';
+import { CloseIcon, FlipCameraIcon } from './icons';
 
 interface CameraCaptureProps {
   onPhoto: (blob: Blob) => void;
@@ -9,9 +9,18 @@ interface CameraCaptureProps {
   onClose: () => void;
 }
 
-type CaptureMode = 'photo' | 'video';
+type FacingMode = 'environment' | 'user';
+type PreviewType = 'photo' | 'video';
+
+interface ZoomRange {
+  min: number;
+  max: number;
+}
 
 const MAX_VIDEO_DURATION_MS = MAX_VIDEO_DURATION_SECONDS * 1000;
+const HOLD_TO_RECORD_MS = 300;
+const DOUBLE_TAP_MS = 300;
+const ZOOM_DRAG_RANGE_PX = 250;
 
 function pickSupportedVideoMimeType(): string {
   const candidates = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
@@ -32,15 +41,25 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
   const streamRef = useRef<MediaStream | null>(null);
   const stopTimerRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
+  const holdTimeoutRef = useRef<number | null>(null);
+  const isHoldingRef = useRef(false);
+  const holdLastYRef = useRef(0);
+  const lastTapAtRef = useRef(0);
+  const zoomRangeRef = useRef<ZoomRange | null>(null);
+  const zoomValueRef = useRef(1);
+  const previewUrlRef = useRef<string | null>(null);
+  const facingModeRef = useRef<FacingMode>('environment');
+
   const [isRecording, setIsRecording] = useState(false);
   const [useFallback, setUseFallback] = useState(false);
-  const [mode, setMode] = useState<CaptureMode>('photo');
+  const [facingMode, setFacingMode] = useState<FacingMode>('environment');
   const [recordedSeconds, setRecordedSeconds] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
-  const [preview, setPreview] = useState<{ url: string; type: CaptureMode } | null>(null);
-  const previewUrlRef = useRef<string | null>(null);
+  const [preview, setPreview] = useState<{ url: string; type: PreviewType } | null>(null);
 
-  function setPreviewFromBlob(blob: Blob, type: CaptureMode) {
+  facingModeRef.current = facingMode;
+
+  function setPreviewFromBlob(blob: Blob, type: PreviewType) {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     const url = URL.createObjectURL(blob);
     previewUrlRef.current = url;
@@ -62,7 +81,7 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
     }
 
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment' }, audio: true })
+      .getUserMedia({ video: { facingMode }, audio: true })
       .then((stream) => {
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop());
@@ -72,6 +91,18 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.play();
+        }
+
+        const [videoTrack] = stream.getVideoTracks();
+        const capabilities = (videoTrack?.getCapabilities?.() ?? {}) as MediaTrackCapabilities & {
+          zoom?: ZoomRange;
+        };
+        if (capabilities.zoom) {
+          zoomRangeRef.current = capabilities.zoom;
+          const settings = (videoTrack.getSettings?.() ?? {}) as MediaTrackSettings & { zoom?: number };
+          zoomValueRef.current = settings.zoom ?? capabilities.zoom.min;
+        } else {
+          zoomRangeRef.current = null;
         }
       })
       .catch(() => {
@@ -84,7 +115,32 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
       if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, []);
+  }, [facingMode]);
+
+  function flipCamera() {
+    if (isRecording) return;
+    setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
+  }
+
+  function handleViewfinderTap() {
+    const now = Date.now();
+    if (now - lastTapAtRef.current < DOUBLE_TAP_MS) {
+      lastTapAtRef.current = 0;
+      flipCamera();
+    } else {
+      lastTapAtRef.current = now;
+    }
+  }
+
+  function applyZoomDelta(deltaYPixels: number) {
+    const range = zoomRangeRef.current;
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!range || !track) return;
+    const sensitivity = (range.max - range.min) / ZOOM_DRAG_RANGE_PX;
+    const next = Math.min(range.max, Math.max(range.min, zoomValueRef.current + deltaYPixels * sensitivity));
+    zoomValueRef.current = next;
+    track.applyConstraints({ advanced: [{ zoom: next } as MediaTrackConstraintSet] }).catch(() => {});
+  }
 
   function takePhoto() {
     const video = videoRef.current;
@@ -94,6 +150,10 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    if (facingModeRef.current === 'user') {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     setShowFlash(true);
@@ -129,7 +189,10 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
     timerIntervalRef.current = window.setInterval(() => {
       setRecordedSeconds((prev) => prev + 1);
     }, 1000);
-    stopTimerRef.current = window.setTimeout(() => stopRecording(), MAX_VIDEO_DURATION_MS);
+    stopTimerRef.current = window.setTimeout(() => {
+      isHoldingRef.current = false;
+      stopRecording();
+    }, MAX_VIDEO_DURATION_MS);
   }
 
   function stopRecording() {
@@ -141,19 +204,39 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
       window.clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
-    mediaRecorderRef.current?.stop();
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
     setIsRecording(false);
   }
 
-  function handleShutterClick() {
-    if (mode === 'photo') {
-      takePhoto();
-      return;
+  function handleShutterPointerDown(event: React.PointerEvent) {
+    event.preventDefault();
+    holdLastYRef.current = event.clientY;
+    isHoldingRef.current = false;
+    holdTimeoutRef.current = window.setTimeout(() => {
+      isHoldingRef.current = true;
+      startRecording();
+    }, HOLD_TO_RECORD_MS);
+  }
+
+  function handleShutterPointerMove(event: React.PointerEvent) {
+    if (!isHoldingRef.current) return;
+    const deltaY = holdLastYRef.current - event.clientY;
+    holdLastYRef.current = event.clientY;
+    applyZoomDelta(deltaY);
+  }
+
+  function handleShutterPointerUp() {
+    if (holdTimeoutRef.current) {
+      window.clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
     }
-    if (isRecording) {
+    if (isHoldingRef.current) {
+      isHoldingRef.current = false;
       stopRecording();
     } else {
-      startRecording();
+      takePhoto();
     }
   }
 
@@ -192,7 +275,13 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
 
   return (
     <div className="camera-capture">
-      <video ref={videoRef} muted playsInline />
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        onClick={handleViewfinderTap}
+        className={facingMode === 'user' ? 'mirrored' : undefined}
+      />
       {showFlash && <div className="camera-flash" />}
 
       <div className="camera-top-bar">
@@ -215,25 +304,6 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
       )}
 
       <div className="camera-bottom-bar">
-        <div className="camera-mode-toggle">
-          <button
-            type="button"
-            className={mode === 'photo' ? 'active' : ''}
-            onClick={() => setMode('photo')}
-            disabled={isRecording}
-          >
-            תמונה
-          </button>
-          <button
-            type="button"
-            className={mode === 'video' ? 'active' : ''}
-            onClick={() => setMode('video')}
-            disabled={isRecording}
-          >
-            וידאו
-          </button>
-        </div>
-
         <div className="camera-shutter-row">
           <div className="camera-preview-thumb">
             {preview && (
@@ -248,13 +318,24 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
           <button
             type="button"
             className={`camera-shutter${isRecording ? ' recording' : ''}`}
-            onClick={handleShutterClick}
-            aria-label={mode === 'photo' ? 'צלם תמונה' : isRecording ? 'עצור הקלטה' : 'התחל הקלטה'}
+            onPointerDown={handleShutterPointerDown}
+            onPointerMove={handleShutterPointerMove}
+            onPointerUp={handleShutterPointerUp}
+            onPointerCancel={handleShutterPointerUp}
+            aria-label={isRecording ? 'עצור הקלטה' : 'צלם תמונה, החזק לוידאו'}
           >
             <span className="camera-shutter-inner" />
           </button>
 
-          <div className="camera-shutter-row-spacer" />
+          <button
+            type="button"
+            className="icon-button camera-flip-button"
+            onClick={flipCamera}
+            disabled={isRecording}
+            aria-label="החלף מצלמה"
+          >
+            <FlipCameraIcon size={20} />
+          </button>
         </div>
       </div>
     </div>
