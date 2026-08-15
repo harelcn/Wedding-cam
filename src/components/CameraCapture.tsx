@@ -11,6 +11,7 @@ interface CameraCaptureProps {
 
 type FacingMode = 'environment' | 'user';
 type PreviewType = 'photo' | 'video';
+type CaptureMode = 'photo' | 'video';
 
 interface ZoomRange {
   min: number;
@@ -52,6 +53,7 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
 
   const [isRecording, setIsRecording] = useState(false);
   const [useFallback, setUseFallback] = useState(false);
+  const [mode, setMode] = useState<CaptureMode>('photo');
   const [facingMode, setFacingMode] = useState<FacingMode>('environment');
   const [recordedSeconds, setRecordedSeconds] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
@@ -213,6 +215,12 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
   function handleShutterPointerDown(event: React.PointerEvent) {
     event.preventDefault();
     holdLastYRef.current = event.clientY;
+
+    if (mode === 'video') {
+      // tap to start/stop handled on pointer up; drag-to-zoom works while recording
+      return;
+    }
+
     isHoldingRef.current = false;
     holdTimeoutRef.current = window.setTimeout(() => {
       isHoldingRef.current = true;
@@ -221,6 +229,14 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
   }
 
   function handleShutterPointerMove(event: React.PointerEvent) {
+    if (mode === 'video') {
+      if (!isRecording) return;
+      const deltaY = holdLastYRef.current - event.clientY;
+      holdLastYRef.current = event.clientY;
+      applyZoomDelta(deltaY);
+      return;
+    }
+
     if (!isHoldingRef.current) return;
     const deltaY = holdLastYRef.current - event.clientY;
     holdLastYRef.current = event.clientY;
@@ -228,6 +244,15 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
   }
 
   function handleShutterPointerUp() {
+    if (mode === 'video') {
+      if (isRecording) {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+      return;
+    }
+
     if (holdTimeoutRef.current) {
       window.clearTimeout(holdTimeoutRef.current);
       holdTimeoutRef.current = null;
@@ -322,7 +347,13 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
             onPointerMove={handleShutterPointerMove}
             onPointerUp={handleShutterPointerUp}
             onPointerCancel={handleShutterPointerUp}
-            aria-label={isRecording ? 'עצור הקלטה' : 'צלם תמונה, החזק לוידאו'}
+            aria-label={
+              isRecording
+                ? 'עצור הקלטה'
+                : mode === 'video'
+                  ? 'התחל הקלטת וידאו'
+                  : 'צלם תמונה, החזק לוידאו'
+            }
           >
             <span className="camera-shutter-inner" />
           </button>
@@ -335,6 +366,25 @@ export default function CameraCapture({ onPhoto, onVideo, onClose }: CameraCaptu
             aria-label="החלף מצלמה"
           >
             <FlipCameraIcon size={20} />
+          </button>
+        </div>
+
+        <div className="camera-mode-toggle">
+          <button
+            type="button"
+            className={mode === 'video' ? 'active' : undefined}
+            onClick={() => setMode('video')}
+            disabled={isRecording}
+          >
+            וידאו
+          </button>
+          <button
+            type="button"
+            className={mode === 'photo' ? 'active' : undefined}
+            onClick={() => setMode('photo')}
+            disabled={isRecording}
+          >
+            תמונה
           </button>
         </div>
       </div>
